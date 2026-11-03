@@ -2,7 +2,7 @@
 // Pure functions only (no DOM). The RNG is injectable so the logic is testable;
 // the default RNG is crypto.getRandomValues.
 import { WORD_LISTS } from './wordlist.js';
-import { log2Choose, countWithClasses } from './entropy.js';
+import { log2Choose, countWithClasses, rating } from './entropy.js';
 
 export const LIMITS = { minLength: 12, maxLength: 24, minShare: 0.2, maxShare: 0.6 };
 
@@ -311,4 +311,33 @@ export function generate(options = {}, rng = cryptoRng) {
 /** Generate `count` independent passwords. */
 export function generateMany(options, count, rng = cryptoRng) {
   return Array.from({ length: count }, () => generate(options, rng));
+}
+
+/**
+ * Keep generating until `count` passwords whose strength tier is in `tiers`
+ * ('weak' | 'fair' | 'good' | 'strong') are found, or `maxAttempts` is reached.
+ * Rejection sampling keeps every accepted password a genuine, unbiased draw
+ * from the generator (we never edit or re-roll parts of a password).
+ * @returns {{results, attempts, meanBits, maxBits, complete}}
+ */
+export function generateMatching(options, count, tiers, rng = cryptoRng, maxAttempts = 5000) {
+  const wanted = new Set(tiers);
+  const results = [];
+  let attempts = 0;
+  let sum = 0;
+  let maxBits = 0;
+  while (wanted.size > 0 && results.length < count && attempts < maxAttempts) {
+    const r = generate(options, rng);
+    attempts++;
+    sum += r.entropyBits;
+    maxBits = Math.max(maxBits, r.entropyBits);
+    if (wanted.has(rating(r.entropyBits).id)) results.push(r);
+  }
+  return {
+    results,
+    attempts,
+    meanBits: attempts ? sum / attempts : 0,
+    maxBits,
+    complete: results.length === count,
+  };
 }

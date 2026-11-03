@@ -15,6 +15,7 @@ Nothing is sent anywhere and nothing is stored. A strict Content-Security-Policy
 - Random part: digits, symbols (editable set), optional random letters. Every enabled class appears at least once.
 - **Capitalization**: none / first word / every word / random.
 - **Leetspeak**: replace up to N letters at random positions (`i->1`, `e->3`, `a->4`, `o->0`, `s->5`, `t->7`).
+- **Show passwords rated**: tick which strength levels to display (Weak < 50 bits, Fair 50-59, Good 60-79, Strong 80+). The generator keeps drawing until it has the requested number of matching passwords (up to 5000 tries) and explains when the settings cannot reach the chosen levels.
 - **Word list**: `large` (~15,000 words, default) or `common` (~10,000 familiar words).
 - **Exclude look-alikes**: `normal` removes `I l 1 | O 0 ' " \``; `strict` also removes `o S 5 B 8 Z 2 . , ; :`. Words containing an excluded glyph are dropped from the list, and leet replacements that would produce an excluded glyph are disabled.
 

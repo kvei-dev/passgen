@@ -92,6 +92,9 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 .legend { margin: 8px 0 0; font-size: 0.9rem; }
 .status { min-height: 1.5em; margin: 4px 0 0; font-size: 0.9rem; }
 
+.filter { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; padding: 8px 12px; }
+.filter label.check { gap: 6px; }
+.filter small { color: var(--muted); }
 .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
 form { display: grid; gap: 14px; }
 label.range { display: grid; gap: 4px; }

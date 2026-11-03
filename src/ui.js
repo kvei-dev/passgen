@@ -1,7 +1,9 @@
-import { generateMany, DEFAULTS } from './generator.js';
+import { generateMatching, DEFAULTS } from './generator.js';
 import { crackSeconds, formatDuration, rating } from './entropy.js';
 
 const $ = (id) => document.getElementById(id);
+const TIERS = ['weak', 'fair', 'good', 'strong'];
+const readTiers = () => TIERS.filter((t) => $(`tier-${t}`).checked);
 
 const PRESETS = {
   balanced: { length: 16, share: 35, capitalization: 'first', exclude: 'normal', leet: false },
@@ -87,13 +89,28 @@ function render() {
   $('o-share').textContent = `${Math.round(s.randomShare * 100)}%`;
   $('leetCount').disabled = !s.leet;
 
+  const tiers = readTiers();
+  if (tiers.length === 0) {
+    $('share-hint').textContent = '';
+    setStatus('Select at least one strength level to show.');
+    return;
+  }
+
   try {
-    const results = generateMany(s, Number($('count').value));
+    const count = Number($('count').value);
+    const { results, attempts, meanBits, maxBits, complete } = generateMatching(s, count, tiers);
     for (const res of results) out.append(renderRow(res));
     const r = results[0];
-    $('share-hint').textContent =
-      `About ${r.randomCount} of ${r.length} characters are random, ${r.length - r.randomCount} come from words.`;
-    setStatus('');
+    $('share-hint').textContent = r
+      ? `About ${r.randomCount} of ${r.length} characters are random, ${r.length - r.randomCount} come from words.`
+      : '';
+    setStatus(
+      complete
+        ? ''
+        : `Found ${results.length} of ${count} passwords in the selected strength range after ${attempts} tries. ` +
+            `With these settings passwords average ${Math.round(meanBits)} bits (best seen ${Math.round(maxBits)}). ` +
+            'Adjust the length, the random share, or the selected levels.',
+    );
   } catch (e) {
     $('share-hint').textContent = '';
     setStatus(e.message);
@@ -101,6 +118,7 @@ function render() {
 }
 
 $('form').addEventListener('input', render);
+$('filter').addEventListener('input', render);
 $('form').addEventListener('submit', (e) => e.preventDefault());
 $('regen').addEventListener('click', render);
 for (const btn of document.querySelectorAll('[data-preset]')) {

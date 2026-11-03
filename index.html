@@ -23,6 +23,13 @@
       <h2 id="out-h">Passwords</h2>
       <button id="regen" type="button" class="primary">Generate again</button>
     </div>
+    <fieldset class="filter" id="filter">
+      <legend>Show passwords rated</legend>
+      <label class="check"><input type="checkbox" id="tier-weak" checked><span class="badge weak">Weak</span><small>&lt; 50 bits</small></label>
+      <label class="check"><input type="checkbox" id="tier-fair" checked><span class="badge fair">Fair</span><small>50&ndash;59</small></label>
+      <label class="check"><input type="checkbox" id="tier-good" checked><span class="badge good">Good</span><small>60&ndash;79</small></label>
+      <label class="check"><input type="checkbox" id="tier-strong" checked><span class="badge strong">Strong</span><small>80+</small></label>
+    </fieldset>
     <ul id="results" aria-live="polite"></ul>
     <p class="legend"><span class="w">words</span> <span class="r">random characters</span></p>
     <p id="status" class="status" role="status"></p>

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
+import { generate, generateMatching, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
 import { countWithClasses, log2Choose, formatDuration, rating } from '../src/entropy.js';
 import { WORD_LISTS } from '../src/wordlist.js';
 
@@ -250,4 +250,41 @@ test('formatDuration / rating', () => {
   assert.equal(rating(55).id, 'fair');
   assert.equal(rating(70).id, 'good');
   assert.equal(rating(90).id, 'strong');
+});
+
+test('generateMatching returns only passwords from the requested tiers', () => {
+  const rng = seeded(2024);
+  // 16 chars / 35%: ~94% fair, ~6% good. 24 chars / 40%: always strong.
+  const cases = [
+    [{ length: 16, randomShare: 0.35 }, ['good']],
+    [{ length: 16, randomShare: 0.35 }, ['fair']],
+    [{ length: 16, randomShare: 0.35 }, ['fair', 'good']],
+    [{ length: 24, randomShare: 0.4 }, ['strong']],
+    [{ length: 24, randomShare: 0.4 }, ['good', 'strong']],
+  ];
+  for (const [opts, tiers] of cases) {
+    const { results, complete } = generateMatching(opts, 5, tiers, rng, 20000);
+    assert.ok(complete, `tiers ${tiers} should be reachable at ${JSON.stringify(opts)}`);
+    assert.equal(results.length, 5);
+    for (const r of results) assert.ok(tiers.includes(rating(r.entropyBits).id), `${r.entropyBits} not in ${tiers}`);
+  }
+});
+
+test('generateMatching reports shortage when the tier is unreachable', () => {
+  const rng = seeded(5);
+  const res = generateMatching({ length: 12, randomShare: 0.2 }, 5, ['strong'], rng, 500);
+  assert.equal(res.complete, false);
+  assert.equal(res.results.length, 0);
+  assert.equal(res.attempts, 500);
+  assert.ok(res.maxBits < 80 && res.meanBits > 0);
+});
+
+test('generateMatching with no tiers does nothing; with all tiers matches generateMany', () => {
+  const rng = seeded(6);
+  const none = generateMatching({}, 5, [], rng);
+  assert.equal(none.attempts, 0);
+  assert.equal(none.complete, false);
+  const all = generateMatching({}, 5, ['weak', 'fair', 'good', 'strong'], rng);
+  assert.ok(all.complete);
+  assert.equal(all.attempts, 5);
 });
