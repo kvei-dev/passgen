@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="light dark">
+  <title>Memorable Password Generator</title>
+  <meta name="description" content="Generates 12-24 character passwords from real words plus a controlled share of random characters. Runs entirely in your browser.">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="src/ui.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Memorable Password Generator</h1>
+    <p class="lead">Real words plus a controlled share of random characters. Everything runs in your browser; nothing is sent or stored.</p>
+  </header>
+
+  <section aria-labelledby="out-h">
+    <div class="row-head">
+      <h2 id="out-h">Passwords</h2>
+      <button id="regen" type="button" class="primary">Generate again</button>
+    </div>
+    <ul id="results" aria-live="polite"></ul>
+    <p class="legend"><span class="w">words</span> <span class="r">random characters</span></p>
+    <p id="status" class="status" role="status"></p>
+  </section>
+
+  <section aria-labelledby="set-h">
+    <h2 id="set-h">Settings</h2>
+
+    <div class="presets" role="group" aria-label="Presets">
+      <button type="button" data-preset="balanced">Balanced</button>
+      <button type="button" data-preset="strong">Strong</button>
+      <button type="button" data-preset="short">Short (12)</button>
+      <button type="button" data-preset="readable">Easy to read</button>
+    </div>
+
+    <form id="form" autocomplete="off">
+      <label class="range">
+        <span>Length <output id="o-length">16</output></span>
+        <input type="range" id="length" min="12" max="24" step="1" value="16">
+      </label>
+
+      <label class="range">
+        <span>Random characters <output id="o-share">35%</output></span>
+        <input type="range" id="share" min="20" max="60" step="5" value="35">
+      </label>
+      <p class="hint" id="share-hint"></p>
+
+      <fieldset>
+        <legend>Random part contains</legend>
+        <label class="check"><input type="checkbox" id="digits" checked> Digits</label>
+        <label class="check"><input type="checkbox" id="symbols" checked> Symbols</label>
+        <label class="check"><input type="checkbox" id="letters"> Random letters</label>
+        <label class="text">Symbol set
+          <input type="text" id="symbolSet" value="!@#$%&amp;*?+=-_." maxlength="40" spellcheck="false">
+        </label>
+      </fieldset>
+
+      <div class="grid">
+        <label class="select">Capitalization
+          <select id="capitalization">
+            <option value="none">none</option>
+            <option value="first" selected>first word</option>
+            <option value="title">every word</option>
+            <option value="random">random</option>
+          </select>
+        </label>
+
+        <label class="select">Exclude look-alikes
+          <select id="exclude">
+            <option value="off">off</option>
+            <option value="normal" selected>normal: I l 1 | O 0 ' " `</option>
+            <option value="strict">strict: also o S 5 B 8 Z 2 . , ; :</option>
+          </select>
+        </label>
+
+        <label class="select">How many
+          <select id="count">
+            <option value="1">1</option>
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+          </select>
+        </label>
+      </div>
+
+      <fieldset>
+        <legend>Letter substitutions (leetspeak)</legend>
+        <label class="check"><input type="checkbox" id="leet"> Replace letters, e.g. i&rarr;1, e&rarr;3, a&rarr;4</label>
+        <label class="select inline">Replace up to
+          <select id="leetCount">
+            <option>1</option><option selected>2</option><option>3</option><option>4</option>
+          </select>
+          letters
+        </label>
+      </fieldset>
+    </form>
+  </section>
+
+  <section class="notes" aria-labelledby="n-h">
+    <h2 id="n-h">How strong is it?</h2>
+    <p>The bit count assumes an attacker knows exactly how this generator works, so only random choices are counted. A fixed rule such as "always replace i with 1" adds nothing. Time to crack assumes 10<sup>10</sup> guesses per second against a fast offline hash.</p>
+    <ul>
+      <li><b>under 50 bits</b> weak: avoid for anything important</li>
+      <li><b>60&ndash;80 bits</b> good for ordinary accounts</li>
+      <li><b>80+ bits</b> strong: master passwords, encryption keys</li>
+    </ul>
+    <p>Short passwords (12 characters) cannot be strong with real words in them; raise the length or the share of random characters, or use a password manager.</p>
+    <p class="credit">Word list: <a href="https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases">EFF large wordlist</a>, &copy; Electronic Frontier Foundation, <a href="https://creativecommons.org/licenses/by/3.0/us/">CC BY 3.0 US</a>.</p>
+  </section>
+</main>
+</body>
+</html>

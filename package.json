@@ -1,0 +1,12 @@
+{
+  "name": "passgen",
+  "version": "1.0.0",
+  "description": "Memorable password generator: words + a controlled share of random characters",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build:wordlist": "node tools/build-wordlist.mjs",
+    "serve": "python3 -m http.server 8080"
+  }
+}
