@@ -1,98 +1,102 @@
 <!doctype html>
-<html lang="en">
+<html lang="uk">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="color-scheme" content="light dark">
-  <title>Memorable Password Generator</title>
-  <meta name="description" content="Generates 12-24 character passwords from real words plus a controlled share of random characters. Runs entirely in your browser.">
+  <title>Генератор запам’ятовуваних паролів</title>
+  <meta name="description" content="Генерує паролі довжиною 12–24 символи зі справжніх слів і контрольованої частки випадкових символів. Працює повністю у вашому браузері.">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="src/ui.js"></script>
 </head>
 <body>
 <main>
   <header>
-    <h1>Memorable Password Generator</h1>
-    <p class="lead">Real words plus a controlled share of random characters. Everything runs in your browser; nothing is sent or stored.</p>
+    <h1>Генератор запам’ятовуваних паролів</h1>
+    <p class="lead">Справжні слова плюс контрольована частка випадкових символів. Усе працює у вашому браузері: нічого не надсилається і не зберігається.</p>
   </header>
 
   <section aria-labelledby="out-h">
     <div class="row-head">
-      <h2 id="out-h">Passwords</h2>
-      <button id="regen" type="button" class="primary">Generate again</button>
+      <h2 id="out-h">Паролі</h2>
+      <button id="regen" type="button" class="primary">Згенерувати ще</button>
     </div>
     <fieldset class="filter" id="filter">
-      <legend>Show passwords rated</legend>
-      <label class="check"><input type="checkbox" id="tier-weak" checked><span class="badge weak">Weak</span><small>&lt; 50 bits</small></label>
-      <label class="check"><input type="checkbox" id="tier-fair" checked><span class="badge fair">Fair</span><small>50&ndash;59</small></label>
-      <label class="check"><input type="checkbox" id="tier-good" checked><span class="badge good">Good</span><small>60&ndash;79</small></label>
-      <label class="check"><input type="checkbox" id="tier-strong" checked><span class="badge strong">Strong</span><small>80+</small></label>
+      <legend>Показувати паролі зі складністю</legend>
+      <label class="check"><input type="checkbox" id="tier-weak" checked><span class="badge weak">Слабкий</span><small>&lt; 50 біт</small></label>
+      <label class="check"><input type="checkbox" id="tier-fair" checked><span class="badge fair">Середній</span><small>50&ndash;59</small></label>
+      <label class="check"><input type="checkbox" id="tier-good" checked><span class="badge good">Добрий</span><small>60&ndash;79</small></label>
+      <label class="check"><input type="checkbox" id="tier-strong" checked><span class="badge strong">Сильний</span><small>80+</small></label>
     </fieldset>
+    <div class="notice" id="notice" hidden>
+      <p id="notice-text"></p>
+      <button type="button" id="autotune">Підібрати налаштування</button>
+    </div>
     <ul id="results" aria-live="polite"></ul>
-    <p class="legend"><span class="w">words</span> <span class="r">random characters</span></p>
+    <p class="legend"><span class="w">слова</span> <span class="r">випадкові символи</span></p>
     <p id="status" class="status" role="status"></p>
   </section>
 
   <section aria-labelledby="set-h">
-    <h2 id="set-h">Settings</h2>
+    <h2 id="set-h">Налаштування</h2>
 
-    <div class="presets" role="group" aria-label="Presets">
-      <button type="button" data-preset="balanced">Balanced</button>
-      <button type="button" data-preset="strong">Strong</button>
-      <button type="button" data-preset="short">Short (12)</button>
-      <button type="button" data-preset="readable">Easy to read</button>
+    <div class="presets" role="group" aria-label="Готові набори">
+      <button type="button" data-preset="balanced">Збалансований</button>
+      <button type="button" data-preset="strong">Сильний</button>
+      <button type="button" data-preset="short">Короткий (12)</button>
+      <button type="button" data-preset="readable">Легко читати</button>
     </div>
 
     <form id="form" autocomplete="off">
       <label class="range">
-        <span>Length <output id="o-length">16</output></span>
+        <span>Довжина <output id="o-length">16</output></span>
         <input type="range" id="length" min="12" max="24" step="1" value="16">
       </label>
 
       <label class="range">
-        <span>Random characters <output id="o-share">35%</output></span>
+        <span>Випадкові символи <output id="o-share">35%</output></span>
         <input type="range" id="share" min="20" max="60" step="5" value="35">
       </label>
       <p class="hint" id="share-hint"></p>
 
       <fieldset>
-        <legend>Random part contains</legend>
-        <label class="check"><input type="checkbox" id="digits" checked> Digits</label>
-        <label class="check"><input type="checkbox" id="symbols" checked> Symbols</label>
-        <label class="check"><input type="checkbox" id="letters"> Random letters</label>
-        <label class="text">Symbol set
+        <legend>Випадкова частина містить</legend>
+        <label class="check"><input type="checkbox" id="digits" checked> Цифри</label>
+        <label class="check"><input type="checkbox" id="symbols" checked> Символи</label>
+        <label class="check"><input type="checkbox" id="letters"> Випадкові літери</label>
+        <label class="text">Набір символів
           <input type="text" id="symbolSet" value="!@#$%&amp;*?+=-_." maxlength="40" spellcheck="false">
         </label>
       </fieldset>
 
       <div class="grid">
-        <label class="select">Capitalization
+        <label class="select">Регістр
           <select id="capitalization">
-            <option value="none">none</option>
-            <option value="first" selected>first word</option>
-            <option value="title">every word</option>
-            <option value="random">random</option>
+            <option value="none">без змін</option>
+            <option value="first" selected>перше слово</option>
+            <option value="title">кожне слово</option>
+            <option value="random">випадково</option>
           </select>
         </label>
 
-        <label class="select">Exclude look-alikes
+        <label class="select">Виключити схожі символи
           <select id="exclude">
-            <option value="off">off</option>
-            <option value="normal" selected>normal: I l 1 | O 0 ' " `</option>
-            <option value="strict">strict: also o S 5 B 8 Z 2 . , ; :</option>
+            <option value="off">вимкнено</option>
+            <option value="normal" selected>звичайно: I l 1 | O 0 ' " `</option>
+            <option value="strict">суворо: ще o S 5 B 8 Z 2 . , ; :</option>
           </select>
         </label>
 
-        <label class="select">Word list
+        <label class="select">Словник
           <select id="wordList">
-            <option value="large" selected>large (15,000 words)</option>
-            <option value="common">common (10,000 words)</option>
+            <option value="large" selected>великий (15 000 слів)</option>
+            <option value="common">поширений (10 000 слів)</option>
           </select>
         </label>
 
-        <label class="select">How many
+        <label class="select">Скільки паролів
           <select id="count">
             <option value="1">1</option>
             <option value="5" selected>5</option>
@@ -102,28 +106,28 @@
       </div>
 
       <fieldset>
-        <legend>Letter substitutions (leetspeak)</legend>
-        <label class="check"><input type="checkbox" id="leet"> Replace letters, e.g. i&rarr;1, e&rarr;3, a&rarr;4</label>
-        <label class="select inline">Replace up to
+        <legend>Заміна літер (leetspeak)</legend>
+        <label class="check"><input type="checkbox" id="leet"> Замінювати літери, напр. i&rarr;1, e&rarr;3, a&rarr;4</label>
+        <label class="select inline">Замінювати до
           <select id="leetCount">
             <option>1</option><option selected>2</option><option>3</option><option>4</option>
           </select>
-          letters
+          літер
         </label>
       </fieldset>
     </form>
   </section>
 
   <section class="notes" aria-labelledby="n-h">
-    <h2 id="n-h">How strong is it?</h2>
-    <p>The bit count assumes an attacker knows exactly how this generator works, so only random choices are counted. A fixed rule such as "always replace i with 1" adds nothing. Time to crack assumes 10<sup>10</sup> guesses per second against a fast offline hash.</p>
+    <h2 id="n-h">Наскільки це надійно?</h2>
+    <p>Кількість біт розрахована так, ніби зловмисник точно знає, як працює цей генератор, тому враховуються лише випадкові вибори. Фіксоване правило на кшталт «завжди заміняти i на 1» нічого не додає. Час підбору рахується для 10<sup>10</sup> спроб за секунду проти швидкого офлайн-хешу.</p>
     <ul>
-      <li><b>under 50 bits</b> weak: avoid for anything important</li>
-      <li><b>60&ndash;80 bits</b> good for ordinary accounts</li>
-      <li><b>80+ bits</b> strong: master passwords, encryption keys</li>
+      <li><b>менше 50 біт</b> слабкий: не використовуйте для важливого</li>
+      <li><b>60&ndash;80 біт</b> добрий для звичайних акаунтів</li>
+      <li><b>80+ біт</b> сильний: майстер-паролі, ключі шифрування</li>
     </ul>
-    <p>Short passwords (12 characters) cannot be strong with real words in them; raise the length or the share of random characters, or use a password manager.</p>
-    <p class="credit">Words: <a href="https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases">EFF large wordlist</a>, &copy; Electronic Frontier Foundation, <a href="https://creativecommons.org/licenses/by/3.0/us/">CC BY 3.0 US</a>; <a href="http://wordlist.aspell.net/">SCOWL</a>, &copy; Kevin Atkinson. Offensive words filtered with the <a href="https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words">LDNOOBW list</a> (CC BY 4.0) and an extra blocklist.</p>
+    <p>Короткі паролі (12 символів) не можуть бути сильними, якщо в них є справжні слова: збільшіть довжину чи частку випадкових символів або скористайтеся менеджером паролів.</p>
+    <p class="credit">Слова: <a href="https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases">EFF large wordlist</a>, &copy; Electronic Frontier Foundation, <a href="https://creativecommons.org/licenses/by/3.0/us/">CC BY 3.0 US</a>; <a href="http://wordlist.aspell.net/">SCOWL</a>, &copy; Kevin Atkinson. Образливі слова відфільтровано за допомогою списку <a href="https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words">LDNOOBW</a> (CC BY 4.0) і додаткового чорного списку.</p>
   </section>
 </main>
 </body>

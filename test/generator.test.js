@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, generateMatching, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
-import { countWithClasses, log2Choose, formatDuration, rating } from '../src/entropy.js';
+import { generate, generateMatching, suggestSettings, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
+import { countWithClasses, log2Choose, formatDuration, rating, plural, bitsLabel } from '../src/entropy.js';
 import { WORD_LISTS } from '../src/wordlist.js';
 
 // Deterministic uint32 PRNG (mulberry32) so failures are reproducible.
@@ -223,7 +223,7 @@ test('a higher random share gives more entropy at the same length', () => {
 });
 
 test('invalid configuration is rejected', () => {
-  assert.throws(() => generate({ digits: false, symbols: false, letters: false }), /at least one/);
+  assert.throws(() => generate({ digits: false, symbols: false, letters: false }), /хоча б один/);
   assert.throws(() => generate({ exclude: 'bogus' }), /unknown exclude/);
   assert.throws(() => generate({ capitalization: 'bogus' }), /unknown capitalization/);
   assert.throws(() => generate({ wordList: 'bogus' }), /unknown word list/);
@@ -242,14 +242,34 @@ test('defaults produce a sane password with the default RNG', () => {
   assert.ok(res.entropyBits > 40);
 });
 
-test('formatDuration / rating', () => {
-  assert.equal(formatDuration(0.2), 'instantly');
-  assert.equal(formatDuration(90), '2 minutes');
-  assert.match(formatDuration(1e14), /years/);
+test('formatDuration / rating (Ukrainian)', () => {
+  assert.equal(formatDuration(0.2), 'миттєво');
+  assert.equal(formatDuration(1), '1 секунда');
+  assert.equal(formatDuration(3), '3 секунди');
+  assert.equal(formatDuration(25), '25 секунд');
+  assert.equal(formatDuration(90), '2 хвилини');
+  assert.equal(formatDuration(3600 * 5), '5 годин');
+  assert.equal(formatDuration(86400 * 21), '21 день');
+  assert.equal(formatDuration(86400 * 365 * 2), '2 роки');
+  assert.equal(formatDuration(86400 * 365 * 5000), '5 тис. років');
+  assert.equal(formatDuration(86400 * 365 * 3e6), '3 млн років');
+  assert.equal(formatDuration(86400 * 365 * 7e9), '7 млрд років');
+  assert.equal(formatDuration(1e30), 'довше за вік Всесвіту');
   assert.equal(rating(40).id, 'weak');
   assert.equal(rating(55).id, 'fair');
   assert.equal(rating(70).id, 'good');
   assert.equal(rating(90).id, 'strong');
+  assert.deepEqual([40, 55, 70, 90].map((b) => rating(b).label), ['Слабкий', 'Середній', 'Добрий', 'Сильний']);
+});
+
+test('Ukrainian plural forms', () => {
+  const f = (n) => plural(n, 'один', 'кілька', 'багато');
+  for (const n of [1, 21, 101]) assert.equal(f(n), 'один', String(n));
+  for (const n of [2, 3, 4, 22, 24, 102]) assert.equal(f(n), 'кілька', String(n));
+  for (const n of [0, 5, 11, 12, 13, 14, 15, 20, 25, 111, 112]) assert.equal(f(n), 'багато', String(n));
+  assert.equal(bitsLabel(51), '51 біт');
+  assert.equal(bitsLabel(52), '52 біти');
+  assert.equal(bitsLabel(55), '55 бітів');
 });
 
 test('generateMatching returns only passwords from the requested tiers', () => {
@@ -287,4 +307,27 @@ test('generateMatching with no tiers does nothing; with all tiers matches genera
   const all = generateMatching({}, 5, ['weak', 'fair', 'good', 'strong'], rng);
   assert.ok(all.complete);
   assert.equal(all.attempts, 5);
+});
+
+test('suggestSettings finds settings that actually reach the requested tiers', () => {
+  const rng = seeded(404);
+  const base = { length: 16, randomShare: 0.35 };
+  for (const tiers of [['strong'], ['good', 'strong'], ['weak'], ['fair']]) {
+    const sug = suggestSettings(base, tiers, rng);
+    assert.ok(sug, `no suggestion for ${tiers}`);
+    assert.ok(sug.length >= LIMITS.minLength && sug.length <= LIMITS.maxLength);
+    assert.ok(sug.randomShare >= LIMITS.minShare - 1e-9 && sug.randomShare <= LIMITS.maxShare + 1e-9);
+    const { complete } = generateMatching({ ...base, ...sug }, 5, tiers, rng, 20000);
+    assert.ok(complete, `suggestion ${JSON.stringify(sug)} cannot produce ${tiers}`);
+  }
+});
+
+test('suggestSettings keeps already-working settings and returns the nearest otherwise', () => {
+  const rng = seeded(405);
+  // Fair is ~94% at 16/35%, so the current settings must be returned unchanged.
+  assert.deepEqual(suggestSettings({ length: 16, randomShare: 0.35 }, ['fair'], rng), { length: 16, randomShare: 0.35 });
+  // Strong needs more length/share than the current 16/35%.
+  const sug = suggestSettings({ length: 16, randomShare: 0.35 }, ['strong'], rng);
+  assert.ok(sug.length > 16 || sug.randomShare > 0.35);
+  assert.equal(suggestSettings({}, [], rng), null);
 });

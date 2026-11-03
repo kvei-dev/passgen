@@ -155,7 +155,7 @@ function buildClasses(o) {
   }
   if (o.letters) classes.push(take(LETTERS));
   const nonEmpty = classes.filter((c) => c.length > 0);
-  if (nonEmpty.length === 0) throw new Error('enable at least one random character class');
+  if (nonEmpty.length === 0) throw new Error('Увімкніть хоча б один тип випадкових символів: цифри, символи або літери.');
   return nonEmpty;
 }
 
@@ -340,4 +340,33 @@ export function generateMatching(options, count, tiers, rng = cryptoRng, maxAtte
     maxBits,
     complete: results.length === count,
   };
+}
+
+/**
+ * Find the (length, randomShare) closest to the current ones for which at least
+ * `minHit` of generated passwords fall in `tiers`. Candidates are the slider grid
+ * (12-24 characters, 20-60% in 5% steps), ordered by distance from the current
+ * settings. Returns {length, randomShare} or null when no setting reaches them.
+ */
+export function suggestSettings(options, tiers, rng = cryptoRng, samples = 200, minHit = 0.1) {
+  const wanted = new Set(tiers);
+  if (wanted.size === 0) return null;
+  const o = normalize(options);
+  const candidates = [];
+  for (let length = LIMITS.minLength; length <= LIMITS.maxLength; length++) {
+    for (let pct = LIMITS.minShare * 100; pct <= LIMITS.maxShare * 100 + 1e-9; pct += 5) {
+      const distance = Math.abs(length - o.length) + Math.abs(pct - o.randomShare * 100) / 5;
+      candidates.push({ length, randomShare: Math.round(pct) / 100, distance });
+    }
+  }
+  candidates.sort((a, b) => a.distance - b.distance);
+  for (const c of candidates) {
+    let hits = 0;
+    for (let i = 0; i < samples; i++) {
+      const r = generate({ ...options, length: c.length, randomShare: c.randomShare }, rng);
+      if (wanted.has(rating(r.entropyBits).id)) hits++;
+    }
+    if (hits / samples >= minHit) return { length: c.length, randomShare: c.randomShare };
+  }
+  return null;
 }

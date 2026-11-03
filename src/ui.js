@@ -1,5 +1,5 @@
-import { generateMatching, DEFAULTS } from './generator.js';
-import { crackSeconds, formatDuration, rating } from './entropy.js';
+import { generateMatching, suggestSettings, DEFAULTS } from './generator.js';
+import { crackSeconds, formatDuration, rating, bitsLabel } from './entropy.js';
 
 const $ = (id) => document.getElementById(id);
 const TIERS = ['weak', 'fair', 'good', 'strong'];
@@ -42,12 +42,17 @@ function setStatus(text) {
   $('status').textContent = text;
 }
 
+function setNotice(text) {
+  $('notice').hidden = !text;
+  $('notice-text').textContent = text || '';
+}
+
 async function copy(text) {
   try {
     await navigator.clipboard.writeText(text);
-    setStatus('Copied to clipboard. Clear it from your clipboard history if you share the device.');
+    setStatus('Скопійовано. Очистіть буфер обміну, якщо пристроєм користуються інші.');
   } catch {
-    setStatus('Copy failed: select the password and copy it manually.');
+    setStatus('Не вдалося скопіювати: виділіть пароль і скопіюйте вручну.');
   }
 }
 
@@ -69,12 +74,12 @@ function renderRow(res) {
   const badge = document.createElement('span');
   badge.className = `badge ${rate.id}`;
   badge.textContent = rate.label;
-  meta.append(badge, ` ${Math.round(res.entropyBits)} bits, cracked in ~${formatDuration(crackSeconds(res.entropyBits))}`);
+  meta.append(badge, ` ${bitsLabel(Math.floor(res.entropyBits))}, підбір ≈ ${formatDuration(crackSeconds(res.entropyBits))}`);
 
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.textContent = 'Copy';
-  btn.setAttribute('aria-label', 'Copy password');
+  btn.textContent = 'Копіювати';
+  btn.setAttribute('aria-label', 'Копіювати пароль');
   btn.addEventListener('click', () => copy(res.password));
 
   li.append(pw, meta, btn);
@@ -90,9 +95,10 @@ function render() {
   $('leetCount').disabled = !s.leet;
 
   const tiers = readTiers();
+  setNotice('');
   if (tiers.length === 0) {
     $('share-hint').textContent = '';
-    setStatus('Select at least one strength level to show.');
+    setStatus('Оберіть хоча б один рівень складності.');
     return;
   }
 
@@ -102,15 +108,15 @@ function render() {
     for (const res of results) out.append(renderRow(res));
     const r = results[0];
     $('share-hint').textContent = r
-      ? `About ${r.randomCount} of ${r.length} characters are random, ${r.length - r.randomCount} come from words.`
+      ? `Приблизно ${r.randomCount} із ${r.length} символів випадкові, ${r.length - r.randomCount} — зі слів.`
       : '';
-    setStatus(
-      complete
-        ? ''
-        : `Found ${results.length} of ${count} passwords in the selected strength range after ${attempts} tries. ` +
-            `With these settings passwords average ${Math.round(meanBits)} bits (best seen ${Math.round(maxBits)}). ` +
-            'Adjust the length, the random share, or the selected levels.',
-    );
+    setStatus('');
+    if (!complete) {
+      setNotice(
+        `Знайдено ${results.length} із ${count} паролів вибраної складності за ${attempts} спроб. ` +
+          `За цих налаштувань паролі в середньому мають ${bitsLabel(Math.round(meanBits))} (максимум ${Math.round(maxBits)}).`,
+      );
+    }
   } catch (e) {
     $('share-hint').textContent = '';
     setStatus(e.message);
@@ -121,6 +127,17 @@ $('form').addEventListener('input', render);
 $('filter').addEventListener('input', render);
 $('form').addEventListener('submit', (e) => e.preventDefault());
 $('regen').addEventListener('click', render);
+$('autotune').addEventListener('click', () => {
+  const sug = suggestSettings(readSettings(), readTiers());
+  if (!sug) {
+    setStatus('Для обраних рівнів підібрати довжину й частку не вдалося: спробуйте інший словник чи менше виключень.');
+    return;
+  }
+  $('length').value = sug.length;
+  $('share').value = Math.round(sug.randomShare * 100);
+  render();
+  setStatus(`Налаштування змінено: довжина ${sug.length}, випадкових символів ${Math.round(sug.randomShare * 100)}%.`);
+});
 for (const btn of document.querySelectorAll('[data-preset]')) {
   btn.addEventListener('click', () => {
     applyPreset(PRESETS[btn.dataset.preset]);

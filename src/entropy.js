@@ -38,34 +38,45 @@ export function crackSeconds(bits) {
   return Math.pow(2, bits - 1) / GUESSES_PER_SECOND;
 }
 
+/** Ukrainian plural form: 1 біт, 2 біти, 5 бітів. */
+export function plural(n, one, few, many) {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
+export const bitsLabel = (n) => `${n} ${plural(n, 'біт', 'біти', 'бітів')}`;
+
 export function formatDuration(seconds) {
-  if (seconds < 1) return 'instantly';
+  if (seconds < 1) return 'миттєво';
   const units = [
-    ['second', 60],
-    ['minute', 60],
-    ['hour', 24],
-    ['day', 365],
-    ['year', 1000],
+    [['секунда', 'секунди', 'секунд'], 60],
+    [['хвилина', 'хвилини', 'хвилин'], 60],
+    [['година', 'години', 'годин'], 24],
+    [['день', 'дні', 'днів'], 365],
+    [['рік', 'роки', 'років'], 1000],
   ];
   let v = seconds;
-  for (const [name, step] of units) {
+  for (const [forms, step] of units) {
     if (v < step) {
       const n = Math.round(v);
-      return `${n} ${name}${n === 1 ? '' : 's'}`;
+      return `${n} ${plural(n, ...forms)}`;
     }
     v /= step;
   }
   // v is now in thousands of years
   const years = v * 1000;
-  if (years < 1e6) return `${Math.round(years / 1000)} thousand years`;
-  if (years < 1e9) return `${Math.round(years / 1e6)} million years`;
-  if (years < 1e12) return `${Math.round(years / 1e9)} billion years`;
-  return 'longer than the age of the universe';
+  if (years < 1e6) return `${Math.round(years / 1000)} тис. років`;
+  if (years < 1e9) return `${Math.round(years / 1e6)} млн років`;
+  if (years < 1e12) return `${Math.round(years / 1e9)} млрд років`;
+  return 'довше за вік Всесвіту';
 }
 
 export function rating(bits) {
-  if (bits < 50) return { id: 'weak', label: 'Weak' };
-  if (bits < 60) return { id: 'fair', label: 'Fair' };
-  if (bits < 80) return { id: 'good', label: 'Good' };
-  return { id: 'strong', label: 'Strong' };
+  if (bits < 50) return { id: 'weak', label: 'Слабкий' };
+  if (bits < 60) return { id: 'fair', label: 'Середній' };
+  if (bits < 80) return { id: 'good', label: 'Добрий' };
+  return { id: 'strong', label: 'Сильний' };
 }

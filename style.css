@@ -95,6 +95,9 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 .filter { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; padding: 8px 12px; }
 .filter label.check { gap: 6px; }
 .filter small { color: var(--muted); }
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--fair); border-radius: 8px; }
+.notice[hidden] { display: none; }
+.notice p { margin: 0; flex: 1 1 260px; font-size: 0.92rem; color: var(--text); }
 .presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
 form { display: grid; gap: 14px; }
 label.range { display: grid; gap: 4px; }
