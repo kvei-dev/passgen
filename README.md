@@ -15,6 +15,7 @@ Nothing is sent anywhere and nothing is stored. A strict Content-Security-Policy
 - Random part: digits, symbols (editable set), optional random letters. Every enabled class appears at least once.
 - **Capitalization**: none / first word / every word / random.
 - **Leetspeak**: replace up to N letters at random positions (`i->1`, `e->3`, `a->4`, `o->0`, `s->5`, `t->7`).
+- **Word list**: `large` (~15,000 words, default) or `common` (~10,000 familiar words).
 - **Exclude look-alikes**: `normal` removes `I l 1 | O 0 ' " \``; `strict` also removes `o S 5 B 8 Z 2 . , ; :`. Words containing an excluded glyph are dropped from the list, and leet replacements that would produce an excluded glyph are disabled.
 
 ## Algorithm
@@ -33,8 +34,8 @@ Computed exactly from the choices actually made: `log2(candidate words at each s
 capitalization/leet position bits + `log2(valid random strings)` + `log2(arrangements)`.
 It assumes the attacker knows the algorithm; only random choices count.
 
-Typical averages (default settings): 12 chars ~38 bits, 16 chars ~52 bits, 20 chars ~61 bits,
-24 chars at 42% random ~80 bits. **12-character passwords with words in them are weak by
+Typical averages with the `large` list: 12 chars ~41 bits, 16 chars (35% random) ~55 bits,
+20 chars ~64 bits, 24 chars at 42% random ~86 bits (the `common` list is 1-2 bits lower). **12-character passwords with words in them are weak by
 design**; use 20+ characters for anything important.
 
 ## Development
@@ -47,8 +48,17 @@ npm run build:wordlist   # regenerate src/wordlist.js from data/
 
 Deployed with GitHub Pages via `.github/workflows/pages.yml` (Settings -> Pages -> Source: GitHub Actions).
 
+## Word lists
+
+Built by `npm run build:wordlist` from `data/` (see `data/NOTICE.md`):
+
+- `common` (10,358 words) = EFF large list + SCOWL levels 10 and 20.
+- `large` (15,092 words) = `common` + SCOWL level 35.
+- Only plain lowercase words of 3-9 letters; derived forms (plurals, -ed, -ing, -ly, -er/-est) of words already in the list are dropped.
+- Offensive and unpleasant words are removed using the LDNOOBW list plus `data/blocklist-extra.txt`.
+
 ## Credits
 
-Word list: [EFF large wordlist](https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases),
-(c) Electronic Frontier Foundation, [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/).
-Hyphenated entries were removed.
+- [EFF large wordlist](https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases), (c) Electronic Frontier Foundation, [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/).
+- [SCOWL](http://wordlist.aspell.net/), (c) Kevin Atkinson (permission notice in `data/SCOWL-Copyright.txt`), via the `wordlist-english` npm package (MIT).
+- [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) blocklist, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

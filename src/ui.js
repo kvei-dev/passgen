@@ -20,6 +20,7 @@ function readSettings() {
     symbolSet: $('symbolSet').value || DEFAULTS.symbolSet,
     capitalization: $('capitalization').value,
     exclude: $('exclude').value,
+    wordList: $('wordList').value,
     leet: $('leet').checked,
     leetCount: Number($('leetCount').value),
   };

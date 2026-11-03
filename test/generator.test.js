@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generate, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
 import { countWithClasses, log2Choose, formatDuration, rating } from '../src/entropy.js';
-import { WORDS } from '../src/wordlist.js';
+import { WORD_LISTS } from '../src/wordlist.js';
 
 // Deterministic uint32 PRNG (mulberry32) so failures are reproducible.
 function seeded(seed) {
@@ -20,10 +20,45 @@ const EXCLUDED = {
   strict: 'Il1|O0\'"`oSBZ258.,;:',
 };
 
-test('wordlist: 7772 unique lowercase words', () => {
-  assert.equal(WORDS.length, 7772);
-  assert.equal(new Set(WORDS).size, WORDS.length);
-  assert.ok(WORDS.every((w) => /^[a-z]{3,9}$/.test(w)));
+test('word lists: unique, lowercase, 3-9 letters, large extends common', () => {
+  for (const [name, list] of Object.entries(WORD_LISTS)) {
+    assert.equal(new Set(list).size, list.length, `${name}: duplicates`);
+    assert.ok(list.every((w) => /^[a-z]{3,9}$/.test(w)), `${name}: bad word`);
+  }
+  assert.ok(WORD_LISTS.common.length > 10000);
+  assert.ok(WORD_LISTS.large.length > 15000);
+  const large = new Set(WORD_LISTS.large);
+  assert.ok(WORD_LISTS.common.every((w) => large.has(w)), 'large must contain every common word');
+});
+
+test('word lists contain no blocklisted words', () => {
+  const bad = ['hell', 'dead', 'naked', 'drug', 'bomb', 'chink', 'cripple', 'retard', 'grope', 'crap', 'damn', 'murder', 'rape'];
+  for (const [name, list] of Object.entries(WORD_LISTS)) {
+    const set = new Set(list);
+    for (const w of bad) assert.ok(!set.has(w), `${name} contains ${w}`);
+    for (const w of list) assert.ok(!/nigg|fuck|shit|cunt|whore|slut|porn|bitch/.test(w), `${name}: ${w}`);
+  }
+});
+
+test('the larger list yields more entropy than the common one', () => {
+  const rng = seeded(31);
+  const avg = (wordList) => {
+    let t = 0;
+    for (let i = 0; i < 400; i++) t += generate({ length: 16, randomShare: 0.35, wordList }, rng).entropyBits;
+    return t / 400;
+  };
+  assert.ok(avg('large') > avg('common'));
+});
+
+test('generated words always come from the selected list', () => {
+  const rng = seeded(77);
+  for (const wordList of ['common', 'large']) {
+    const set = new Set(WORD_LISTS[wordList]);
+    for (let i = 0; i < 300; i++) {
+      const res = generate({ wordList, length: 12 + (i % 13) }, rng);
+      for (const w of res.words) assert.ok(set.has(w), `${wordList}: ${w}`);
+    }
+  }
 });
 
 test('randomInt rejects values that would cause modulo bias', () => {
@@ -191,6 +226,7 @@ test('invalid configuration is rejected', () => {
   assert.throws(() => generate({ digits: false, symbols: false, letters: false }), /at least one/);
   assert.throws(() => generate({ exclude: 'bogus' }), /unknown exclude/);
   assert.throws(() => generate({ capitalization: 'bogus' }), /unknown capitalization/);
+  assert.throws(() => generate({ wordList: 'bogus' }), /unknown word list/);
 });
 
 test('out-of-range length and share are clamped', () => {

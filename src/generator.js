@@ -1,7 +1,7 @@
 // Password generator: words + a controlled share of random characters.
 // Pure functions only (no DOM). The RNG is injectable so the logic is testable;
 // the default RNG is crypto.getRandomValues.
-import { WORDS } from './wordlist.js';
+import { WORD_LISTS } from './wordlist.js';
 import { log2Choose, countWithClasses } from './entropy.js';
 
 export const LIMITS = { minLength: 12, maxLength: 24, minShare: 0.2, maxShare: 0.6 };
@@ -17,6 +17,7 @@ export const DEFAULTS = {
   leet: false,
   leetCount: 1, // how many letters to substitute (random positions)
   exclude: 'normal', // off | normal | strict  (look-alike characters)
+  wordList: 'large', // common (~10k familiar words) | large (~15k)
 };
 
 // Characters never produced in each mode (case-sensitive glyphs).
@@ -74,19 +75,20 @@ function sampleSubset(n, k, rng) {
 
 const poolCache = new Map();
 
-/** Words that contain no excluded glyph, bucketed by length. */
-function getPool(mode) {
-  if (poolCache.has(mode)) return poolCache.get(mode);
+/** Words of one list that contain no excluded glyph, bucketed by length. */
+function getPool(listName, mode) {
+  const key = `${listName}/${mode}`;
+  if (poolCache.has(key)) return poolCache.get(key);
   const excluded = new Set(EXCLUDED[mode]);
   const byLen = new Map();
-  for (const w of WORDS) {
+  for (const w of WORD_LISTS[listName]) {
     if ([...w].some((c) => excluded.has(c))) continue;
     if (!byLen.has(w.length)) byLen.set(w.length, []);
     byLen.get(w.length).push(w);
   }
   const lens = [...byLen.keys()].sort((a, b) => a - b);
   const pool = { byLen, minLen: lens[0], maxLen: lens[lens.length - 1] };
-  poolCache.set(mode, pool);
+  poolCache.set(key, pool);
   return pool;
 }
 
@@ -124,6 +126,7 @@ function normalize(input) {
   o.length = Math.round(Math.min(LIMITS.maxLength, Math.max(LIMITS.minLength, o.length)));
   o.randomShare = Math.min(LIMITS.maxShare, Math.max(LIMITS.minShare, o.randomShare));
   if (!(o.exclude in EXCLUDED)) throw new Error(`unknown exclude mode: ${o.exclude}`);
+  if (!(o.wordList in WORD_LISTS)) throw new Error(`unknown word list: ${o.wordList}`);
   if (!['none', 'first', 'title', 'random'].includes(o.capitalization)) {
     throw new Error(`unknown capitalization: ${o.capitalization}`);
   }
@@ -166,7 +169,7 @@ function buildClasses(o) {
  */
 export function generate(options = {}, rng = cryptoRng) {
   const o = normalize(options);
-  const pool = getPool(o.exclude);
+  const pool = getPool(o.wordList, o.exclude);
   const classes = buildClasses(o);
   const excluded = new Set(EXCLUDED[o.exclude]);
 
