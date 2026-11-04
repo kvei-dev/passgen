@@ -2,7 +2,7 @@
 // Pure functions only (no DOM). The RNG is injectable so the logic is testable;
 // the default RNG is crypto.getRandomValues.
 import { WORD_LISTS } from './wordlist.js';
-import { log2Choose, countWithClasses, rating } from './entropy.js';
+import { log2Choose, countWithClasses } from './entropy.js';
 
 export const LIMITS = { minLength: 12, maxLength: 24, minShare: 0.2, maxShare: 0.6 };
 
@@ -14,7 +14,7 @@ export const DEFAULTS = {
   randomShare: 0.35, // fraction of the password made of random characters
   digits: true,
   symbols: true,
-  letters: false, // random letters inside the random part
+  letters: false, // random letters inside the random part: false | true (both cases) | 'upper' (A-Z only)
   symbolSet: SHIFT_ROW_SYMBOLS, // the shifted number row of a keyboard: !@#$%^&*()_+
   capitalization: 'first', // none | first | title | random
   leet: false,
@@ -43,7 +43,8 @@ const LEET = {
 
 const PREFERRED_MIN_WORD = 4;
 const DIGITS = '0123456789';
-const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const LETTERS = 'abcdefghijklmnopqrstuvwxyz' + UPPER;
 
 // ---------------------------------------------------------------- randomness
 
@@ -163,7 +164,8 @@ function buildClasses(o) {
     // only printable ASCII punctuation; letters/digits/space are not "symbols"
     classes.push(take([...o.symbolSet].filter((c) => /[!-/:-@[-`{-~]/.test(c))));
   }
-  if (o.letters) classes.push(take(LETTERS));
+  if (o.letters === 'upper') classes.push(take(UPPER));
+  else if (o.letters) classes.push(take(LETTERS));
   const nonEmpty = classes.filter((c) => c.length > 0);
   if (nonEmpty.length === 0) throw new Error('Увімкніть хоча б один тип випадкових символів: цифри, символи або літери.');
   return nonEmpty;
@@ -323,44 +325,73 @@ export function generateMany(options, count, rng = cryptoRng) {
   return Array.from({ length: count }, () => generate(options, rng));
 }
 
+/** Minimum honest entropy (bits) for each "minimum level" choice. */
+export const TIER_MIN_BITS = { any: 0, fair: 50, good: 60, strong: 80 };
+
+const MIN_ACCEPTANCE = 0.05; // below this, selecting is too slow and costs too many bits
+const SAFETY_BITS = 0.2; // margin for sampling noise in the acceptance estimate
+
 /**
- * Keep generating until `count` passwords whose strength tier is in `tiers`
- * ('weak' | 'fair' | 'good' | 'strong') are found, or `maxAttempts` is reached.
- * Rejection sampling keeps every accepted password a genuine, unbiased draw
- * from the generator (we never edit or re-roll parts of a password).
- * @returns {{results, attempts, meanBits, maxBits, complete}}
+ * Plan an honest "minimum level" filter.
+ *
+ * Accepting only passwords whose entropy s is >= T means an attacker who knows the filter
+ * only has to search that subset: with acceptance probability p, the real guess resistance
+ * of an accepted password is  s + log2(p)  bits (the "selection correction"), NOT s.
+ * We therefore pick the smallest T for which  T + log2(p(T)) >= minimum  and report the
+ * corrected value. If no T works the settings simply cannot honestly reach that level.
+ *
+ * @returns {{ok, threshold, acceptance, correction, meanBits, bestHonest}}
  */
-export function generateMatching(options, count, tiers, rng = cryptoRng, maxAttempts = 5000) {
-  const wanted = new Set(tiers);
-  const results = [];
-  let attempts = 0;
-  let sum = 0;
-  let maxBits = 0;
-  while (wanted.size > 0 && results.length < count && attempts < maxAttempts) {
-    const r = generate(options, rng);
-    attempts++;
-    sum += r.entropyBits;
-    maxBits = Math.max(maxBits, r.entropyBits);
-    if (wanted.has(rating(r.entropyBits).id)) results.push(r);
+export function planFilter(options, minTier, rng = cryptoRng, samples = 2000) {
+  const minBits = TIER_MIN_BITS[minTier];
+  if (minBits === undefined) throw new Error(`unknown level: ${minTier}`);
+  const xs = Array.from({ length: samples }, () => generate(options, rng).entropyBits).sort((x, y) => x - y);
+  const meanBits = xs.reduce((x, y) => x + y, 0) / samples;
+  if (minBits === 0) {
+    return { ok: true, threshold: -Infinity, acceptance: 1, correction: 0, meanBits, bestHonest: meanBits };
   }
-  return {
-    results,
-    attempts,
-    meanBits: attempts ? sum / attempts : 0,
-    maxBits,
-    complete: results.length === count,
-  };
+  let bestHonest = -Infinity;
+  for (let i = 0; i < samples; i++) {
+    if (i > 0 && xs[i] === xs[i - 1]) continue; // first index of each distinct value
+    const p = (samples - i) / samples; // fraction of draws with s >= xs[i]
+    if (p < MIN_ACCEPTANCE) break;
+    const honest = xs[i] + Math.log2(p);
+    bestHonest = Math.max(bestHonest, honest);
+    if (honest >= minBits + SAFETY_BITS) {
+      return { ok: true, threshold: xs[i], acceptance: p, correction: -Math.log2(p), meanBits, bestHonest };
+    }
+  }
+  return { ok: false, threshold: Infinity, acceptance: 0, correction: 0, meanBits, bestHonest };
 }
 
 /**
- * Find the (length, randomShare) closest to the current ones for which at least
- * `minHit` of generated passwords fall in `tiers`. Candidates are the slider grid
- * (12-24 characters, 20-60% in 5% steps), ordered by distance from the current
- * settings. Returns {length, randomShare} or null when no setting reaches them.
+ * Generate `count` passwords that honestly have at least the requested level.
+ * Each result carries `honestBits` (= entropyBits minus the selection correction).
+ * @returns {{results, plan, attempts, complete}}
  */
-export function suggestSettings(options, tiers, rng = cryptoRng, samples = 200, minHit = 0.1) {
-  const wanted = new Set(tiers);
-  if (wanted.size === 0) return null;
+export function generateAtLeast(options, count, minTier, rng = cryptoRng, { maxAttempts = 20000, plan } = {}) {
+  const pl = plan || planFilter(options, minTier, rng);
+  if (!pl.ok) return { results: [], plan: pl, attempts: 0, complete: false };
+  const results = [];
+  let attempts = 0;
+  while (results.length < count && attempts < maxAttempts) {
+    const r = generate(options, rng);
+    attempts++;
+    if (r.entropyBits >= pl.threshold) {
+      r.honestBits = r.entropyBits - pl.correction;
+      results.push(r);
+    }
+  }
+  return { results, plan: pl, attempts, complete: results.length === count };
+}
+
+/**
+ * Nearest (length, randomShare) on the slider grid (12-24 characters, 20-60% in 5% steps)
+ * for which the requested minimum level is honestly reachable with a reasonable acceptance.
+ * Returns {length, randomShare} or null.
+ */
+export function suggestSettings(options, minTier, rng = cryptoRng, samples = 500) {
+  if (minTier === 'any') return null;
   const o = normalize(options);
   const candidates = [];
   for (let length = LIMITS.minLength; length <= LIMITS.maxLength; length++) {
@@ -369,14 +400,10 @@ export function suggestSettings(options, tiers, rng = cryptoRng, samples = 200, 
       candidates.push({ length, randomShare: Math.round(pct) / 100, distance });
     }
   }
-  candidates.sort((a, b) => a.distance - b.distance);
+  candidates.sort((x, y) => x.distance - y.distance);
   for (const c of candidates) {
-    let hits = 0;
-    for (let i = 0; i < samples; i++) {
-      const r = generate({ ...options, length: c.length, randomShare: c.randomShare }, rng);
-      if (wanted.has(rating(r.entropyBits).id)) hits++;
-    }
-    if (hits / samples >= minHit) return { length: c.length, randomShare: c.randomShare };
+    const plan = planFilter({ ...options, length: c.length, randomShare: c.randomShare }, minTier, rng, samples);
+    if (plan.ok && plan.acceptance >= 0.2) return { length: c.length, randomShare: c.randomShare };
   }
   return null;
 }

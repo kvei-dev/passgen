@@ -51,12 +51,15 @@
       </div>
     </div>
 
-    <fieldset class="filter" id="filter" data-advanced>
-      <legend>Показувати паролі зі складністю</legend>
-      <label class="check"><input type="checkbox" id="tier-weak" checked><span class="badge weak">Слабкий</span><small>&lt; 50 біт</small></label>
-      <label class="check"><input type="checkbox" id="tier-fair" checked><span class="badge fair">Середній</span><small>50&ndash;59</small></label>
-      <label class="check"><input type="checkbox" id="tier-good" checked><span class="badge good">Добрий</span><small>60&ndash;79</small></label>
-      <label class="check"><input type="checkbox" id="tier-strong" checked><span class="badge strong">Сильний</span><small>80+</small></label>
+    <fieldset class="filter" id="filter">
+      <legend>Мінімальна надійність паролів</legend>
+      <div class="seg">
+        <label><input type="radio" name="minTier" value="any" checked><span>Будь-яка</span></label>
+        <label><input type="radio" name="minTier" value="fair"><span>Середній+ <small>50+ біт</small></span></label>
+        <label><input type="radio" name="minTier" value="good"><span>Добрий+ <small>60+</small></span></label>
+        <label><input type="radio" name="minTier" value="strong"><span>Сильний <small>80+</small></span></label>
+      </div>
+      <p class="hint" id="filter-note"></p>
     </fieldset>
 
     <div class="notice" id="notice" role="status" hidden>
@@ -76,7 +79,7 @@
   <!-- ============================ SIMPLE ============================ -->
   <section class="card" data-simple aria-labelledby="lvl-h">
     <h2 id="lvl-h">Яка довжина потрібна?</h2>
-    <p class="hint">Оцінка біт обчислюється для кожного рівня окремо. Довший пароль завжди надійніший.</p>
+    <p class="hint">Слова малими літерами, а випадкова частина містить цифри, символи (!@#$%^&amp;*()_+) і великі літери. Довший пароль завжди надійніший.</p>
     <div class="levels" role="radiogroup" aria-labelledby="lvl-h" id="levels">
       <label class="level"><input type="radio" name="level" value="short"><span class="level-body"><b>12</b><span class="lname">Короткий</span><span class="lbits" id="bits-short"></span><span class="lnote">Лише для сайтів, що не приймають довші</span></span></label>
       <label class="level"><input type="radio" name="level" value="compact"><span class="level-body"><b>14</b><span class="lname">Компактний</span><span class="lbits" id="bits-compact"></span><span class="lnote">Коротко, але не зовсім слабко</span></span></label>
@@ -120,7 +123,13 @@
         <div class="inline">
           <label class="check"><input type="checkbox" id="digits" checked> Цифри</label>
           <label class="check"><input type="checkbox" id="symbols" checked> Символи</label>
-          <label class="check"><input type="checkbox" id="letters"> Літери</label>
+          <label class="select inline-select">Літери
+            <select id="letters">
+              <option value="none">немає</option>
+              <option value="upper">великі</option>
+              <option value="all">великі й малі</option>
+            </select>
+          </label>
         </div>
         <label class="text">Набір символів
           <input type="text" id="symbolSet" value="!@#$%^&amp;*()_+" maxlength="40" spellcheck="false" autocapitalize="off" autocorrect="off">

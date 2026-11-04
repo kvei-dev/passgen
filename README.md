@@ -10,19 +10,21 @@ never stored, logged or transmitted.
 
 ## Two modes
 
-**Simple** - pick a length card and copy:
+**Simple** - pick a length card and copy. Words are lowercase; the random part holds digits,
+shift-row symbols and random **capital** letters (each capital letter adds ~1 bit per random
+character, which is what lets 16 characters honestly reach "Good"):
 
-| Length | Name | ~Entropy |
-|---|---|---|
-| 12 | Short | ~40 bits (weak) |
-| 14 | Compact | ~50 bits |
-| 16 | Basic | ~55 bits |
-| 18 | Standard | ~61 bits |
-| 22 | Strong | ~72 bits |
-| 24 | Maximum | ~85 bits |
+| Length | Name | ~Entropy | Rating |
+|---|---|---|---|
+| 12 | Short | ~46 bits | weak |
+| 14 | Compact | ~56 bits | fair |
+| 16 | Basic | ~65 bits | good (every password) |
+| 18 | Standard | ~69 bits | good |
+| 22 | Strong | ~83 bits | strong |
+| 24 | Maximum | ~96 bits | strong |
 
 The numbers on the cards are measured live (Monte-Carlo over the real generator), not hard-coded.
-One switch: avoid look-alike characters (`I l 1 | O 0`).
+Also: a switch to avoid look-alike characters (`I l 1 | O 0`) and the *minimum strength* filter (see below).
 
 **Advanced** - everything below.
 
@@ -30,13 +32,13 @@ One switch: avoid look-alike characters (`I l 1 | O 0`).
 
 - **Length** 12-24 (the result always has exactly that many characters).
 - **Random characters** 20-60% of the length. Separators between words count towards this share.
-- Random part: digits, symbols, optional random letters. Every enabled class appears at least once.
+- Random part: digits, symbols and optionally random letters (none / capital / both cases). Every enabled class appears at least once.
 - **Symbols** default to the shifted number row of the keyboard: `!@#$%^&*()_+`. Presets: Shift row / extended set; the field is editable (printable ASCII punctuation only).
 - **Capitalization**: none / first word / every word / random.
 - **Leetspeak**: replace up to N letters at random positions (`i->1`, `e->3`, `a->4`, `o->0`, `s->5`, `t->7`).
 - **Exclude look-alikes**: `normal` removes `I l 1 | O 0 ' " \``; `strict` also removes `o S 5 B 8 Z 2 . , ; :`. Words containing an excluded glyph are dropped from the list; leet replacements that would produce an excluded glyph are disabled.
 - **Word list**: `large` (~15,000 words, default) or `common` (~10,000).
-- **Show passwords rated** (Weak < 50 bits, Fair 50-59, Good 60-79, Strong 80+): the generator keeps drawing until it has the requested number of matching passwords (up to 5000 tries). If the selected levels are unreachable it explains why and offers **"Підібрати налаштування"**, which moves length/share to the nearest values that reach them.
+- **Minimum strength** (both modes): Any / Fair+ (50 bits) / Good+ (60) / Strong (80). See "Honest filtering" below. If the settings cannot honestly reach the level, the page says so and offers a button that picks a longer length (simple mode) or the nearest length/share (advanced mode).
 - **Attack scenario** for the time-to-crack estimate: online login (10^2/s), slow hash such as bcrypt (10^4/s), fast hash on one GPU (10^10/s, default), cluster (10^12/s).
 - Hide button (blurs the passwords while screen-sharing), copy with clipboard fallback, presets, reset.
 
@@ -50,6 +52,17 @@ One switch: avoid look-alike characters (`I l 1 | O 0`).
 
 All randomness comes from `crypto.getRandomValues` with rejection sampling (no modulo bias).
 There is **no `Math.random` fallback**: without Web Crypto the page refuses to generate.
+
+## Honest filtering
+
+Showing only passwords with a high entropy *figure* is a form of selection: an attacker who knows
+the filter only searches the accepted subset, so the real guess resistance of an accepted password
+is `s + log2(p)` bits (`p` = acceptance probability), not `s`. `planFilter` therefore picks the smallest
+acceptance threshold for which `threshold + log2(p) >= minimum` (estimated from 2000 draws, with a
+small safety margin) and every displayed number already includes the correction. If no threshold
+works, the level is reported as unreachable with these settings instead of showing inflated bits.
+Example: 16 characters with digits and symbols only average ~55 bits; a "Good+" filter cannot honestly
+fix that (best ~59.7), whereas the simple 16-character level (capital letters) is Good without any selection.
 
 ## Entropy estimate
 

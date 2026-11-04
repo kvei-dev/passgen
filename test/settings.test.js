@@ -12,8 +12,10 @@ import {
   getStorage,
   toOptions,
   toView,
+  suggestLevel,
+  MIN_TIERS,
 } from '../src/settings.js';
-import { generate, estimateEntropy, SHIFT_ROW_SYMBOLS, DEFAULTS, LIMITS } from '../src/generator.js';
+import { generate, estimateEntropy, planFilter, SHIFT_ROW_SYMBOLS, DEFAULTS, LIMITS } from '../src/generator.js';
 import { SCENARIOS, crackSeconds, rating } from '../src/entropy.js';
 
 function fakeStorage(initial = {}) {
@@ -68,25 +70,54 @@ test('simple levels include 12, 14, 16, 18, 22 and 24 characters and generate ex
   }
 });
 
-test('simple levels get stronger as they get longer', () => {
-  const means = Object.values(SIMPLE_LEVELS).map((l) =>
-    estimateEntropy(toOptions({ mode: 'simple', simple: { level: l.id, avoidLookalikes: true } }), 600).mean,
-  );
-  for (let i = 1; i < means.length; i++) assert.ok(means[i] > means[i - 1], `levels ${i - 1}->${i}: ${means}`);
-  assert.equal(rating(means[0]).id, 'weak');
-  assert.ok(['good', 'strong'].includes(rating(means[3]).id), 'standard level must be at least Good');
-  assert.equal(rating(means.at(-1)).id, 'strong');
+test('simple levels get stronger as they get longer; 16 characters are honestly Good', () => {
+  const mean = (id) => estimateEntropy(toOptions({ mode: 'simple', simple: { level: id, avoidLookalikes: true } }), 800).mean;
+  const ids = Object.keys(SIMPLE_LEVELS);
+  const means = ids.map(mean);
+  for (let i = 1; i < means.length; i++) assert.ok(means[i] > means[i - 1], `levels ${ids[i - 1]}->${ids[i]}: ${means}`);
+  assert.equal(rating(means[0]).id, 'weak'); // 12
+  assert.equal(rating(means[2]).id, 'good'); // 16
+  assert.equal(rating(means[3]).id, 'good'); // 18
+  assert.equal(rating(means.at(-1)).id, 'strong'); // 24
+  // every 16-character password is Good, with and without look-alike exclusion, and no selection is needed
+  for (const avoidLookalikes of [true, false]) {
+    const opts = toOptions({ mode: 'simple', simple: { level: 'basic', avoidLookalikes } });
+    let min = Infinity;
+    for (let i = 0; i < 3000; i++) min = Math.min(min, generate(opts).entropyBits);
+    assert.ok(min >= 60, `avoid=${avoidLookalikes}: min ${min}`);
+  }
 });
 
-test('simple mode shows every tier and 5 passwords; advanced follows its settings', () => {
-  const simple = toView(defaultState());
-  assert.equal(simple.count, 5);
-  assert.deepEqual(simple.tiers, ['weak', 'fair', 'good', 'strong']);
-  const s = defaultState();
-  s.mode = 'advanced';
-  s.adv.count = 10;
-  s.adv.tiers = { weak: false, fair: false, good: true, strong: true };
-  assert.deepEqual(toView(s), { count: 10, tiers: ['good', 'strong'] });
+test('simple levels use lowercase words plus random capital letters', () => {
+  for (const id of Object.keys(SIMPLE_LEVELS)) {
+    const opts = toOptions({ mode: 'simple', simple: { level: id, avoidLookalikes: true } });
+    assert.equal(opts.letters, 'upper');
+    assert.equal(opts.capitalization, 'none');
+    for (let i = 0; i < 100; i++) {
+      const res = generate(opts);
+      for (const seg of res.segments) {
+        if (seg.kind === 'word') assert.match(seg.text, /^[a-z]+$/);
+        else assert.match(seg.text, /^[A-Z0-9!@#$%^&*()_+]+$/);
+      }
+    }
+  }
+});
+
+test('view: simple shows 5, advanced follows its count; both share the minimum level', () => {
+  const d = defaultState();
+  assert.deepEqual(toView(d), { count: 5, minTier: 'any' });
+  const s = { ...d, mode: 'advanced', minTier: 'good', adv: { ...d.adv, count: 10 } };
+  assert.deepEqual(toView(s), { count: 10, minTier: 'good' });
+  assert.deepEqual(MIN_TIERS.map((t) => t.id), ['any', 'fair', 'good', 'strong']);
+});
+
+test('suggestLevel picks the shortest sufficient level, never a shorter one', () => {
+  const d = defaultState();
+  const at = (level) => ({ ...d, simple: { level, avoidLookalikes: true } });
+  assert.equal(suggestLevel(at('short'), 'good'), 'basic'); // 12 -> first level that honestly reaches Good
+  assert.equal(suggestLevel(at('short'), 'strong'), 'strong'); // 22 characters
+  assert.equal(suggestLevel(at('max'), 'strong'), 'max');
+  assert.equal(suggestLevel(at('strong'), 'good'), 'strong'); // never goes shorter than the current level
 });
 
 test('sanitize: garbage in, valid complete state out', () => {
@@ -97,7 +128,8 @@ test('sanitize: garbage in, valid complete state out', () => {
     mode: 'advanced',
     scenario: 'nope',
     simple: { level: 'ultra', avoidLookalikes: 'yes' },
-    adv: { length: 999, share: -5, symbolSet: 'abc12éЖ', capitalization: 'LOUD', exclude: 1, wordList: 'huge', leetCount: 99, count: 7, tiers: { weak: false, bogus: true } },
+    minTier: 'epic',
+    adv: { length: 999, share: -5, symbolSet: 'abc12éЖ', letters: 'weird', capitalization: 'LOUD', exclude: 1, wordList: 'huge', leetCount: 99, count: 7 },
   });
   assert.equal(s.mode, 'advanced');
   assert.equal(s.scenario, 'fast');
@@ -111,7 +143,11 @@ test('sanitize: garbage in, valid complete state out', () => {
   assert.equal(s.adv.wordList, 'large');
   assert.equal(s.adv.leetCount, 4);
   assert.equal(s.adv.count, 5);
-  assert.deepEqual(s.adv.tiers, { weak: false, fair: true, good: true, strong: true });
+  assert.equal(s.adv.letters, 'none');
+  assert.equal(s.minTier, 'any');
+  assert.equal(sanitize({ adv: { letters: true } }).adv.letters, 'all'); // legacy boolean
+  assert.equal(sanitize({ adv: { letters: false } }).adv.letters, 'none');
+  assert.equal(sanitize({ minTier: 'good' }).minTier, 'good');
 });
 
 test('sanitizeSymbols keeps unique printable ASCII punctuation only', () => {

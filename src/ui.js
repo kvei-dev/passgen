@@ -1,10 +1,11 @@
-import { generateMatching, suggestSettings, estimateEntropy, SHIFT_ROW_SYMBOLS } from './generator.js';
+import { generateAtLeast, suggestSettings, estimateEntropy, SHIFT_ROW_SYMBOLS, TIER_MIN_BITS } from './generator.js';
 import { crackSeconds, formatDuration, rating, bitsLabel, SCENARIOS } from './entropy.js';
 import {
   SIMPLE_LEVELS,
   ADV_PRESETS,
   ALL_SYMBOLS,
-  TIER_IDS,
+  MIN_TIERS,
+  suggestLevel,
   defaultState,
   loadState,
   saveState,
@@ -17,6 +18,9 @@ import {
 const $ = (id) => document.getElementById(id);
 const storage = getStorage();
 let state = loadState(storage);
+
+const bitsOf = (res) => res.honestBits ?? res.entropyBits;
+const tierLabel = (id) => MIN_TIERS.find((t) => t.id === id)?.label ?? id;
 
 const VERDICTS = {
   weak: 'Короткий пароль: підходить лише там, де довших не приймають.',
@@ -101,7 +105,7 @@ function applyStateToControls() {
   $('share').value = a.share;
   $('digits').checked = a.digits;
   $('symbols').checked = a.symbols;
-  $('letters').checked = a.letters;
+  $('letters').value = a.letters;
   $('symbolSet').value = a.symbolSet;
   $('capitalization').value = a.capitalization;
   $('exclude').value = a.exclude;
@@ -110,11 +114,10 @@ function applyStateToControls() {
   $('leet').checked = a.leet;
   $('leetCount').value = String(a.leetCount);
   $('scenario').value = state.scenario;
-  for (const id of TIER_IDS) $(`tier-${id}`).checked = a.tiers[id];
+  for (const radio of document.querySelectorAll('input[name="minTier"]')) radio.checked = radio.value === state.minTier;
 }
 
 function readAdvanced() {
-  const tiers = Object.fromEntries(TIER_IDS.map((id) => [id, $(`tier-${id}`).checked]));
   state = sanitize({
     ...state,
     adv: {
@@ -122,7 +125,7 @@ function readAdvanced() {
       share: $('share').value,
       digits: $('digits').checked,
       symbols: $('symbols').checked,
-      letters: $('letters').checked,
+      letters: $('letters').value,
       symbolSet: $('symbolSet').value,
       capitalization: $('capitalization').value,
       exclude: $('exclude').value,
@@ -130,8 +133,8 @@ function readAdvanced() {
       leet: $('leet').checked,
       leetCount: $('leetCount').value,
       count: Number($('count').value),
-      tiers,
     },
+    minTier: state.minTier,
     scenario: $('scenario').value,
   });
 }
@@ -149,14 +152,15 @@ function fillPassword(el, res) {
 }
 
 function fillMeta(el, res) {
-  const rate = rating(res.entropyBits);
+  const bits = bitsOf(res);
+  const rate = rating(bits);
   const sc = scenarioOf();
   const badge = document.createElement('span');
   badge.className = `badge ${rate.id}`;
   badge.textContent = rate.label;
   el.replaceChildren(
     badge,
-    ` · ${bitsLabel(Math.floor(res.entropyBits))} · підбір ≈ ${formatDuration(crackSeconds(res.entropyBits, sc.rate))} (${sc.label.toLowerCase()})`,
+    ` · ${bitsLabel(Math.floor(bits))} · підбір ≈ ${formatDuration(crackSeconds(bits, sc.rate))} (${sc.label.toLowerCase()})`,
   );
   return rate;
 }
@@ -198,33 +202,28 @@ function renderPrimary(res) {
   fillPassword(code, res);
   const rate = fillMeta($('primary-meta'), res);
   meter.className = `meter t-${rate.id}`;
-  meter.setAttribute('aria-label', `Надійність: ${rate.label}, ${bitsLabel(Math.floor(res.entropyBits))}`);
+  meter.setAttribute('aria-label', `Надійність: ${rate.label}, ${bitsLabel(Math.floor(bitsOf(res)))}`);
   $('verdict').textContent = VERDICTS[rate.id];
   $('copy-primary').disabled = false;
 }
 
 function render() {
   const opts = toOptions(state);
-  const { count, tiers } = toView(state);
+  const { count, minTier } = toView(state);
 
   $('o-length').textContent = state.adv.length;
   $('o-share').textContent = `${state.adv.share}%`;
   $('leetCount').disabled = !state.adv.leet;
   $('scenario-hint').textContent = scenarioOf().hint;
+  $('autotune').textContent = state.mode === 'simple' ? 'Обрати довшу довжину' : 'Підібрати налаштування';
+  $('filter-note').textContent = '';
   setNotice('');
   setStatus('');
   $('alts').replaceChildren();
   $('alts-wrap').hidden = true;
 
-  if (tiers.length === 0) {
-    renderPrimary(null);
-    $('share-hint').textContent = '';
-    setStatus('Оберіть хоча б один рівень складності.');
-    return;
-  }
-
   try {
-    const { results, attempts, meanBits, maxBits, complete } = generateMatching(opts, count, tiers);
+    const { results, plan, attempts, complete } = generateAtLeast(opts, count, minTier);
     renderPrimary(results[0]);
     const rest = results.slice(1);
     for (const res of rest) $('alts').append(renderAlt(res));
@@ -234,11 +233,17 @@ function render() {
     $('share-hint').textContent = r
       ? `Приблизно ${r.randomCount} із ${r.length} символів випадкові, ${r.length - r.randomCount} — зі слів.`
       : '';
-    if (!complete) {
+
+    if (!plan.ok) {
       setNotice(
-        `Знайдено ${results.length} із ${count} паролів вибраної складності за ${attempts} спроб. ` +
-          `За цих налаштувань паролі в середньому мають ${bitsLabel(Math.round(meanBits))} (максимум ${Math.round(maxBits)}).`,
+        `З цими налаштуваннями паролі чесно не досягають рівня «${tierLabel(minTier)}»: у середньому ≈ ${bitsLabel(Math.floor(plan.meanBits))}, ` +
+          `навіть із відбором не більше ≈ ${bitsLabel(Math.floor(plan.bestHonest))}. Потрібно щонайменше ${TIER_MIN_BITS[minTier]} із невеликим запасом на похибку оцінки.`,
       );
+    } else if (!complete) {
+      setNotice(`Знайдено лише ${results.length} із ${count} паролів за ${attempts} спроб. Змініть налаштування.`);
+    } else if (plan.correction >= 0.1) {
+      $('filter-note').textContent =
+        `Відбір за надійністю враховано: показані біти зменшено на ≈ ${plan.correction.toFixed(1).replace('.', ',')} біта, бо зловмисник знає про відбір.`;
     }
   } catch (e) {
     renderPrimary(null);
@@ -295,7 +300,12 @@ const onAdvancedInput = () => {
   update();
 };
 $('form').addEventListener('input', onAdvancedInput);
-$('filter').addEventListener('input', onAdvancedInput);
+for (const radio of document.querySelectorAll('input[name="minTier"]')) {
+  radio.addEventListener('change', () => {
+    state.minTier = radio.value;
+    update();
+  });
+}
 $('form').addEventListener('submit', (e) => e.preventDefault());
 
 for (const btn of document.querySelectorAll('[data-preset]')) {
@@ -336,9 +346,21 @@ $('mask').addEventListener('click', () => {
 });
 
 $('autotune').addEventListener('click', () => {
-  const sug = suggestSettings(toOptions(state), toView(state).tiers);
+  if (state.mode === 'simple') {
+    const level = suggestLevel(state, state.minTier);
+    if (!level) {
+      setStatus('Жодна довжина не дає такого рівня чесно: спробуйте нижчий мінімум.');
+      return;
+    }
+    state.simple.level = level;
+    applyStateToControls();
+    update();
+    setStatus(`Обрано довжину ${SIMPLE_LEVELS[level].length}.`);
+    return;
+  }
+  const sug = suggestSettings(toOptions(state), state.minTier);
   if (!sug) {
-    setStatus('Для обраних рівнів підібрати довжину й частку не вдалося: спробуйте інший словник чи менше виключень.');
+    setStatus('Для цього рівня підібрати довжину й частку не вдалося: спробуйте інший словник, менше виключень або нижчий мінімум.');
     return;
   }
   state.adv.length = sug.length;

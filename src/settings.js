@@ -1,23 +1,32 @@
 // App state: defaults, presets, validation and persistence.
 // Only SETTINGS are ever stored (in localStorage, in this browser). Generated
 // passwords are never stored, logged or sent anywhere.
-import { DEFAULTS, LIMITS, SHIFT_ROW_SYMBOLS } from './generator.js';
+import { DEFAULTS, LIMITS, SHIFT_ROW_SYMBOLS, planFilter } from './generator.js';
 import { SCENARIOS } from './entropy.js';
 
 export const STORAGE_KEY = 'passgen:settings:v1';
-export const TIER_IDS = ['weak', 'fair', 'good', 'strong'];
+/** "Minimum level" choices; the bit thresholds live in generator.js (TIER_MIN_BITS). */
+export const MIN_TIERS = [
+  { id: 'any', label: 'Будь-яка' },
+  { id: 'fair', label: 'Середній+' },
+  { id: 'good', label: 'Добрий+' },
+  { id: 'strong', label: 'Сильний' },
+];
 
 /** A broader symbol set (no quotes, backtick or backslash: they are error-prone to type). */
 export const ALL_SYMBOLS = '!@#$%^&*()_+-=[]{};:,.<>/?|~';
 
 /** Levels of the simple mode. */
+// The random part of every simple level holds digits, shift-row symbols and random CAPITAL letters;
+// the words stay lowercase so they remain easy to spot. Capital letters add ~1 bit per random character,
+// which is what lets 16 characters honestly reach "Good" (>= 60 bits).
 export const SIMPLE_LEVELS = {
-  short: { id: 'short', length: 12, randomShare: 0.4, name: 'Короткий', note: 'Лише для сайтів, що не приймають довші паролі' },
-  compact: { id: 'compact', length: 14, randomShare: 0.4, name: 'Компактний', note: 'Коли потрібно коротко, але не зовсім слабко' },
-  basic: { id: 'basic', length: 16, randomShare: 0.4, name: 'Базовий', note: 'Для неважливих акаунтів і форумів' },
+  short: { id: 'short', length: 12, randomShare: 0.4, name: 'Короткий', note: 'Лише для сайтів, що не приймають довші' },
+  compact: { id: 'compact', length: 14, randomShare: 0.4, name: 'Компактний', note: 'Коротко, але не зовсім слабко' },
+  basic: { id: 'basic', length: 16, randomShare: 0.45, name: 'Базовий', note: 'Неважливі акаунти, форуми' },
   standard: { id: 'standard', length: 18, randomShare: 0.4, name: 'Звичайний', note: 'Для більшості акаунтів' },
-  strong: { id: 'strong', length: 22, randomShare: 0.4, name: 'Сильний', note: 'Пошта, банк, робочі акаунти' },
-  max: { id: 'max', length: 24, randomShare: 0.5, name: 'Максимум', note: 'Майстер-пароль, ключі шифрування' },
+  strong: { id: 'strong', length: 22, randomShare: 0.4, name: 'Сильний', note: 'Пошта, банк, робота' },
+  max: { id: 'max', length: 24, randomShare: 0.4, name: 'Максимум', note: 'Майстер-пароль, ключі' },
 };
 
 /** Quick presets of the advanced mode (fields of `state.adv`). */
@@ -37,7 +46,7 @@ export function defaultState() {
       share: Math.round(DEFAULTS.randomShare * 100),
       digits: true,
       symbols: true,
-      letters: false,
+      letters: 'none',
       symbolSet: SHIFT_ROW_SYMBOLS,
       capitalization: DEFAULTS.capitalization,
       exclude: DEFAULTS.exclude,
@@ -45,8 +54,8 @@ export function defaultState() {
       leet: false,
       leetCount: 2,
       count: 5,
-      tiers: { weak: true, fair: true, good: true, strong: true },
     },
+    minTier: 'any',
     scenario: 'fast',
   };
 }
@@ -79,8 +88,8 @@ export function sanitize(raw) {
   if (!raw || typeof raw !== 'object') return d;
   const a = raw.adv && typeof raw.adv === 'object' ? raw.adv : {};
   const s = raw.simple && typeof raw.simple === 'object' ? raw.simple : {};
-  const t = a.tiers && typeof a.tiers === 'object' ? a.tiers : {};
-  const tiers = Object.fromEntries(TIER_IDS.map((id) => [id, bool(t[id], true)]));
+  // legacy: `letters` used to be a boolean
+  const letters = a.letters === true ? 'all' : a.letters === false ? 'none' : oneOf(a.letters, ['none', 'upper', 'all'], d.adv.letters);
   return {
     mode: oneOf(raw.mode, ['simple', 'advanced'], d.mode),
     simple: {
@@ -92,7 +101,7 @@ export function sanitize(raw) {
       share: int(a.share, LIMITS.minShare * 100, LIMITS.maxShare * 100, d.adv.share),
       digits: bool(a.digits, d.adv.digits),
       symbols: bool(a.symbols, d.adv.symbols),
-      letters: bool(a.letters, d.adv.letters),
+      letters,
       symbolSet: sanitizeSymbols(a.symbolSet) || d.adv.symbolSet,
       capitalization: oneOf(a.capitalization, ['none', 'first', 'title', 'random'], d.adv.capitalization),
       exclude: oneOf(a.exclude, ['off', 'normal', 'strict'], d.adv.exclude),
@@ -100,8 +109,8 @@ export function sanitize(raw) {
       leet: bool(a.leet, d.adv.leet),
       leetCount: int(a.leetCount, 1, 4, d.adv.leetCount),
       count: oneOf(Number(a.count), [1, 5, 10], d.adv.count),
-      tiers,
     },
+    minTier: oneOf(raw.minTier, MIN_TIERS.map((x) => x.id), d.minTier),
     scenario: oneOf(raw.scenario, SCENARIOS.map((x) => x.id), d.scenario),
   };
 }
@@ -150,9 +159,9 @@ export function toOptions(state) {
       randomShare: lvl.randomShare,
       digits: true,
       symbols: true,
-      letters: false,
+      letters: 'upper',
       symbolSet: SHIFT_ROW_SYMBOLS,
-      capitalization: 'first',
+      capitalization: 'none',
       exclude: state.simple.avoidLookalikes ? 'normal' : 'off',
       wordList: 'large',
       leet: false,
@@ -164,7 +173,7 @@ export function toOptions(state) {
     randomShare: a.share / 100,
     digits: a.digits,
     symbols: a.symbols,
-    letters: a.letters,
+    letters: a.letters === 'upper' ? 'upper' : a.letters === 'all',
     symbolSet: a.symbolSet,
     capitalization: a.capitalization,
     exclude: a.exclude,
@@ -174,8 +183,23 @@ export function toOptions(state) {
   };
 }
 
-/** How many passwords to show, and which strength tiers are wanted. */
+/** How many passwords to show and the minimum honest level they must reach. */
 export function toView(state) {
-  if (state.mode === 'simple') return { count: 5, tiers: [...TIER_IDS] };
-  return { count: state.adv.count, tiers: TIER_IDS.filter((id) => state.adv.tiers[id]) };
+  return { count: state.mode === 'simple' ? 5 : state.adv.count, minTier: state.minTier };
+}
+
+/**
+ * Simple mode: the shortest level (not shorter than the current one) for which the
+ * requested minimum level is honestly reachable. Returns a level id or null.
+ */
+export function suggestLevel(state, minTier, rng, samples = 600) {
+  const levels = Object.values(SIMPLE_LEVELS).sort((x, y) => x.length - y.length);
+  const current = SIMPLE_LEVELS[state.simple.level];
+  for (const lvl of levels) {
+    if (lvl.length < current.length) continue;
+    const opts = toOptions({ mode: 'simple', simple: { level: lvl.id, avoidLookalikes: state.simple.avoidLookalikes } });
+    const plan = planFilter(opts, minTier, rng, samples);
+    if (plan.ok && plan.acceptance >= 0.2) return lvl.id;
+  }
+  return null;
 }

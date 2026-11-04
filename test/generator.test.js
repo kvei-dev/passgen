@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, generateMatching, suggestSettings, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
+import { generate, planFilter, generateAtLeast, suggestSettings, TIER_MIN_BITS, randomInt, DEFAULTS, LIMITS } from '../src/generator.js';
 import { countWithClasses, log2Choose, formatDuration, rating, plural, bitsLabel } from '../src/entropy.js';
 import { WORD_LISTS } from '../src/wordlist.js';
 
@@ -272,62 +272,95 @@ test('Ukrainian plural forms', () => {
   assert.equal(bitsLabel(55), '55 бітів');
 });
 
-test('generateMatching returns only passwords from the requested tiers', () => {
-  const rng = seeded(2024);
-  // 16 chars / 35%: ~94% fair, ~6% good. 24 chars / 40%: always strong.
-  const cases = [
-    [{ length: 16, randomShare: 0.35 }, ['good']],
-    [{ length: 16, randomShare: 0.35 }, ['fair']],
-    [{ length: 16, randomShare: 0.35 }, ['fair', 'good']],
-    [{ length: 24, randomShare: 0.4 }, ['strong']],
-    [{ length: 24, randomShare: 0.4 }, ['good', 'strong']],
-  ];
-  for (const [opts, tiers] of cases) {
-    const { results, complete } = generateMatching(opts, 5, tiers, rng, 20000);
-    assert.ok(complete, `tiers ${tiers} should be reachable at ${JSON.stringify(opts)}`);
-    assert.equal(results.length, 5);
-    for (const r of results) assert.ok(tiers.includes(rating(r.entropyBits).id), `${r.entropyBits} not in ${tiers}`);
+test('letters option: "upper" produces only capital random letters, true both cases', () => {
+  const rng = seeded(808);
+  let sawLower = false;
+  for (let i = 0; i < 300; i++) {
+    const up = generate({ letters: 'upper', digits: false, symbols: false, capitalization: 'none', length: 16 }, rng);
+    for (const seg of up.segments.filter((x) => x.kind === 'random')) assert.match(seg.text, /^[A-Z]+$/);
+    const all = generate({ letters: true, digits: false, symbols: false, capitalization: 'none', length: 16 }, rng);
+    for (const seg of all.segments.filter((x) => x.kind === 'random')) if (/[a-z]/.test(seg.text)) sawLower = true;
   }
+  assert.ok(sawLower, 'letters:true should also produce lowercase random letters');
 });
 
-test('generateMatching reports shortage when the tier is unreachable', () => {
-  const rng = seeded(5);
-  const res = generateMatching({ length: 12, randomShare: 0.2 }, 5, ['strong'], rng, 500);
+test('planFilter: "any" accepts everything with no correction', () => {
+  const rng = seeded(1);
+  const plan = planFilter({ length: 16 }, 'any', rng, 300);
+  assert.deepEqual([plan.ok, plan.acceptance, plan.correction], [true, 1, 0]);
+  const { results, complete } = generateAtLeast({ length: 16 }, 5, 'any', rng, { plan });
+  assert.ok(complete);
+  for (const r of results) assert.equal(r.honestBits, r.entropyBits);
+});
+
+test('planFilter: unknown level is rejected', () => {
+  assert.throws(() => planFilter({}, 'epic'), /unknown level/);
+});
+
+test('honest filter: bits shown for selected passwords never exceed what the attacker faces', () => {
+  const rng = seeded(2025);
+  const configs = [
+    { length: 16, randomShare: 0.45, letters: 'upper', capitalization: 'none' },
+    { length: 20, randomShare: 0.35 },
+    { length: 24, randomShare: 0.4 },
+    { length: 18, randomShare: 0.35, letters: 'upper' },
+  ];
+  let checkedFiltering = 0;
+  for (const o of configs) {
+    for (const tier of ['fair', 'good', 'strong']) {
+      const plan = planFilter(o, tier, rng, 3000);
+      if (!plan.ok) continue;
+      // every accepted password honestly clears the level, after the selection correction
+      const { results, complete } = generateAtLeast(o, 20, tier, rng, { plan });
+      assert.ok(complete);
+      for (const r of results) {
+        assert.ok(r.entropyBits >= plan.threshold);
+        assert.ok(r.honestBits >= TIER_MIN_BITS[tier], `${JSON.stringify(o)} ${tier}: ${r.honestBits}`);
+        assert.ok(Math.abs(r.honestBits - (r.entropyBits - plan.correction)) < 1e-9);
+      }
+      // the estimated acceptance rate matches reality (this is what the correction is built on)
+      let accepted = 0;
+      const N = 20000;
+      for (let i = 0; i < N; i++) if (generate(o, rng).entropyBits >= plan.threshold) accepted++;
+      assert.ok(Math.abs(accepted / N - plan.acceptance) < 0.03, `acceptance ${plan.acceptance} vs ${accepted / N}`);
+      if (plan.acceptance < 0.999) checkedFiltering++;
+    }
+  }
+  assert.ok(checkedFiltering > 0, 'at least one configuration must exercise a real (selective) filter');
+});
+
+test('honest filter refuses levels the settings cannot honestly reach', () => {
+  const rng = seeded(77);
+  // 16 chars / 35% with digits+symbols: ~55 bits on average, selection cannot honestly reach 60.
+  const plan = planFilter({ length: 16, randomShare: 0.35 }, 'good', rng, 3000);
+  assert.equal(plan.ok, false);
+  assert.ok(plan.bestHonest < 60.2 && plan.meanBits < 60);
+  const res = generateAtLeast({ length: 16, randomShare: 0.35 }, 5, 'good', rng, { plan });
   assert.equal(res.complete, false);
   assert.equal(res.results.length, 0);
-  assert.equal(res.attempts, 500);
-  assert.ok(res.maxBits < 80 && res.meanBits > 0);
 });
 
-test('generateMatching with no tiers does nothing; with all tiers matches generateMany', () => {
-  const rng = seeded(6);
-  const none = generateMatching({}, 5, [], rng);
-  assert.equal(none.attempts, 0);
-  assert.equal(none.complete, false);
-  const all = generateMatching({}, 5, ['weak', 'fair', 'good', 'strong'], rng);
-  assert.ok(all.complete);
-  assert.equal(all.attempts, 5);
+test('16 characters honestly reach "Good" with random capital letters (words lowercase)', () => {
+  const rng = seeded(16);
+  const o = { length: 16, randomShare: 0.45, letters: 'upper', capitalization: 'none', exclude: 'normal' };
+  let min = Infinity;
+  for (let i = 0; i < 4000; i++) min = Math.min(min, generate(o, rng).entropyBits);
+  assert.ok(min >= 60, `min ${min}`);
+  const plan = planFilter(o, 'good', rng, 2000);
+  assert.ok(plan.ok && plan.acceptance > 0.99, 'no selection needed: every draw is already Good');
 });
 
-test('suggestSettings finds settings that actually reach the requested tiers', () => {
+test('suggestSettings returns the nearest settings that honestly reach the level', () => {
   const rng = seeded(404);
   const base = { length: 16, randomShare: 0.35 };
-  for (const tiers of [['strong'], ['good', 'strong'], ['weak'], ['fair']]) {
-    const sug = suggestSettings(base, tiers, rng);
-    assert.ok(sug, `no suggestion for ${tiers}`);
+  assert.equal(suggestSettings(base, 'any', rng), null);
+  for (const tier of ['good', 'strong']) {
+    const sug = suggestSettings(base, tier, rng);
+    assert.ok(sug, `no suggestion for ${tier}`);
     assert.ok(sug.length >= LIMITS.minLength && sug.length <= LIMITS.maxLength);
-    assert.ok(sug.randomShare >= LIMITS.minShare - 1e-9 && sug.randomShare <= LIMITS.maxShare + 1e-9);
-    const { complete } = generateMatching({ ...base, ...sug }, 5, tiers, rng, 20000);
-    assert.ok(complete, `suggestion ${JSON.stringify(sug)} cannot produce ${tiers}`);
+    const plan = planFilter({ ...base, ...sug }, tier, rng, 3000);
+    assert.ok(plan.ok, `${JSON.stringify(sug)} does not honestly reach ${tier}`);
   }
-});
-
-test('suggestSettings keeps already-working settings and returns the nearest otherwise', () => {
-  const rng = seeded(405);
-  // Fair is ~94% at 16/35%, so the current settings must be returned unchanged.
-  assert.deepEqual(suggestSettings({ length: 16, randomShare: 0.35 }, ['fair'], rng), { length: 16, randomShare: 0.35 });
-  // Strong needs more length/share than the current 16/35%.
-  const sug = suggestSettings({ length: 16, randomShare: 0.35 }, ['strong'], rng);
-  assert.ok(sug.length > 16 || sug.randomShare > 0.35);
-  assert.equal(suggestSettings({}, [], rng), null);
+  // already-reachable level: settings stay as they are
+  assert.deepEqual(suggestSettings(base, 'fair', rng), base);
 });
