@@ -31,11 +31,23 @@ export function countWithClasses(total, classSizes, len) {
   return count;
 }
 
-export const GUESSES_PER_SECOND = 1e10; // offline attack on a fast hash
+/**
+ * Attacker models: guesses per second. Rough, order-of-magnitude figures.
+ * `fast` is the default: an offline attack on a stolen database of fast hashes
+ * (MD5/SHA-1/SHA-256) using about one modern gaming GPU.
+ */
+export const SCENARIOS = [
+  { id: 'online', rate: 1e2, label: 'Онлайн-вхід', hint: 'підбір через форму входу, сайт обмежує спроби (≈100 за секунду)' },
+  { id: 'slow', rate: 1e4, label: 'Повільний хеш', hint: 'викрадена база з bcrypt або Argon2, одна відеокарта (≈10⁴ за секунду)' },
+  { id: 'fast', rate: 1e10, label: 'Швидкий хеш', hint: 'викрадена база з MD5/SHA, одна відеокарта (≈10¹⁰ за секунду)' },
+  { id: 'cluster', rate: 1e12, label: 'Потужний кластер', hint: 'багато відеокарт або спеціалізоване обладнання (≈10¹² за секунду)' },
+];
 
-/** Average time to crack: half the search space at GUESSES_PER_SECOND. */
-export function crackSeconds(bits) {
-  return Math.pow(2, bits - 1) / GUESSES_PER_SECOND;
+export const GUESSES_PER_SECOND = SCENARIOS.find((s) => s.id === 'fast').rate;
+
+/** Average time to crack: half the search space at `rate` guesses per second. */
+export function crackSeconds(bits, rate = GUESSES_PER_SECOND) {
+  return Math.pow(2, bits - 1) / rate;
 }
 
 /** Ukrainian plural form: 1 біт, 2 біти, 5 бітів. */

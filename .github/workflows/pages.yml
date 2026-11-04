@@ -35,12 +35,12 @@ jobs:
       - name: Assemble site
         run: |
           mkdir _site
-          cp -r index.html style.css src _site/
+          cp -r index.html style.css favicon.svg src _site/
           # Cache-busting: GitHub Pages caches files for 10 minutes, so a browser could
           # otherwise mix a new index.html with an old module. Tag every reference with the commit.
           V="${GITHUB_SHA::8}"
           sed -i -E "s#(from '\./[a-z]+\.js)'#\1?v=$V'#" _site/src/*.js
-          sed -i -E "s#(src=\"src/ui\.js)\"#\1?v=$V\"#; s#(href=\"style\.css)\"#\1?v=$V\"#" _site/index.html
+          sed -i -E "s#(src=\"src/ui\.js)\"#\1?v=$V\"#; s#(href=\"style\.css)\"#\1?v=$V\"#; s#(href=\"favicon\.svg)\"#\1?v=$V\"#" _site/index.html
       - uses: actions/upload-pages-artifact@v3
       - id: deployment
         uses: actions/deploy-pages@v4

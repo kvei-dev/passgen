@@ -2,73 +2,134 @@
 <html lang="uk">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)">
   <title>Генератор запам’ятовуваних паролів</title>
-  <meta name="description" content="Генерує паролі довжиною 12–24 символи зі справжніх слів і контрольованої частки випадкових символів. Працює повністю у вашому браузері.">
+  <meta name="description" content="Генерує паролі довжиною 12–24 символи зі справжніх слів і контрольованої частки випадкових символів. Працює повністю у вашому браузері, нічого не надсилає.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Генератор запам’ятовуваних паролів">
+  <meta property="og:description" content="Слова + випадкові символи: паролі, які легше запам’ятати. Чесна оцінка надійності, усе локально в браузері.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="src/ui.js"></script>
 </head>
-<body>
-<main>
-  <header>
-    <h1>Генератор запам’ятовуваних паролів</h1>
-    <p class="lead">Справжні слова плюс контрольована частка випадкових символів. Усе працює у вашому браузері: нічого не надсилається і не зберігається.</p>
-  </header>
+<body data-mode="simple">
+<a class="skip" href="#main">До змісту</a>
 
-  <section aria-labelledby="out-h">
-    <div class="row-head">
-      <h2 id="out-h">Паролі</h2>
-      <button id="regen" type="button" class="primary">Згенерувати ще</button>
+<header class="top">
+  <div class="brand">
+    <h1>Генератор запам’ятовуваних паролів</h1>
+    <p class="lead">Справжні слова плюс випадкові символи. Усе працює у вашому браузері, паролі нікуди не надсилаються і не зберігаються.</p>
+  </div>
+  <div class="mode" role="group" aria-label="Режим">
+    <button type="button" id="mode-simple" aria-pressed="true">Простий</button>
+    <button type="button" id="mode-advanced" aria-pressed="false">Розширений</button>
+  </div>
+</header>
+
+<noscript><p class="fatal">Для роботи генератора потрібен JavaScript. Він виконується лише у вашому браузері.</p></noscript>
+
+<main id="main">
+  <!-- ============================ RESULT ============================ -->
+  <section class="card result" aria-labelledby="out-h">
+    <h2 id="out-h" class="sr-only">Згенеровані паролі</h2>
+
+    <div class="primary">
+      <div class="pw-big" id="primary-pw"><code id="primary-code" aria-label="Згенерований пароль"></code></div>
+      <div class="meter" id="meter" role="img" aria-label=""><i></i><i></i><i></i><i></i></div>
+      <p class="meta" id="primary-meta"></p>
+      <p class="verdict" id="verdict" data-simple></p>
+      <div class="actions">
+        <button type="button" id="copy-primary" class="btn primary">Копіювати</button>
+        <button type="button" id="regen" class="btn">Згенерувати ще</button>
+        <button type="button" id="mask" class="btn ghost" aria-pressed="false">Приховати</button>
+      </div>
     </div>
-    <fieldset class="filter" id="filter">
+
+    <fieldset class="filter" id="filter" data-advanced>
       <legend>Показувати паролі зі складністю</legend>
       <label class="check"><input type="checkbox" id="tier-weak" checked><span class="badge weak">Слабкий</span><small>&lt; 50 біт</small></label>
       <label class="check"><input type="checkbox" id="tier-fair" checked><span class="badge fair">Середній</span><small>50&ndash;59</small></label>
       <label class="check"><input type="checkbox" id="tier-good" checked><span class="badge good">Добрий</span><small>60&ndash;79</small></label>
       <label class="check"><input type="checkbox" id="tier-strong" checked><span class="badge strong">Сильний</span><small>80+</small></label>
     </fieldset>
-    <div class="notice" id="notice" hidden>
+
+    <div class="notice" id="notice" role="status" hidden>
       <p id="notice-text"></p>
-      <button type="button" id="autotune">Підібрати налаштування</button>
+      <button type="button" id="autotune" class="btn">Підібрати налаштування</button>
     </div>
-    <ul id="results" aria-live="polite"></ul>
+
+    <div id="alts-wrap" hidden>
+      <h3 class="sub" id="alts-h">Інші варіанти</h3>
+      <ul id="alts" aria-labelledby="alts-h"></ul>
+    </div>
+
     <p class="legend"><span class="w">слова</span> <span class="r">випадкові символи</span></p>
     <p id="status" class="status" role="status"></p>
   </section>
 
-  <section aria-labelledby="set-h">
-    <h2 id="set-h">Налаштування</h2>
+  <!-- ============================ SIMPLE ============================ -->
+  <section class="card" data-simple aria-labelledby="lvl-h">
+    <h2 id="lvl-h">Яка довжина потрібна?</h2>
+    <p class="hint">Оцінка біт обчислюється для кожного рівня окремо. Довший пароль завжди надійніший.</p>
+    <div class="levels" role="radiogroup" aria-labelledby="lvl-h" id="levels">
+      <label class="level"><input type="radio" name="level" value="short"><span class="level-body"><b>12</b><span class="lname">Короткий</span><span class="lbits" id="bits-short"></span><span class="lnote">Лише для сайтів, що не приймають довші</span></span></label>
+      <label class="level"><input type="radio" name="level" value="compact"><span class="level-body"><b>14</b><span class="lname">Компактний</span><span class="lbits" id="bits-compact"></span><span class="lnote">Коротко, але не зовсім слабко</span></span></label>
+      <label class="level"><input type="radio" name="level" value="basic"><span class="level-body"><b>16</b><span class="lname">Базовий</span><span class="lbits" id="bits-basic"></span><span class="lnote">Неважливі акаунти, форуми</span></span></label>
+      <label class="level"><input type="radio" name="level" value="standard" checked><span class="level-body"><b>18</b><span class="lname">Звичайний</span><span class="lbits" id="bits-standard"></span><span class="lnote">Для більшості акаунтів</span></span></label>
+      <label class="level"><input type="radio" name="level" value="strong"><span class="level-body"><b>22</b><span class="lname">Сильний</span><span class="lbits" id="bits-strong"></span><span class="lnote">Пошта, банк, робота</span></span></label>
+      <label class="level"><input type="radio" name="level" value="max"><span class="level-body"><b>24</b><span class="lname">Максимум</span><span class="lbits" id="bits-max"></span><span class="lnote">Майстер-пароль, ключі</span></span></label>
+    </div>
+    <label class="check toggle"><input type="checkbox" id="avoid" checked> Уникати схожих символів (I l 1 | O 0)</label>
+  </section>
+
+  <!-- =========================== ADVANCED =========================== -->
+  <section class="card" data-advanced aria-labelledby="set-h">
+    <div class="row-head">
+      <h2 id="set-h">Налаштування</h2>
+      <button type="button" id="reset" class="btn ghost small">Скинути</button>
+    </div>
 
     <div class="presets" role="group" aria-label="Готові набори">
-      <button type="button" data-preset="balanced">Збалансований</button>
-      <button type="button" data-preset="strong">Сильний</button>
-      <button type="button" data-preset="short">Короткий (12)</button>
-      <button type="button" data-preset="readable">Легко читати</button>
+      <button type="button" class="chip" data-preset="balanced">Збалансований</button>
+      <button type="button" class="chip" data-preset="strong">Сильний</button>
+      <button type="button" class="chip" data-preset="short">Короткий (12)</button>
+      <button type="button" class="chip" data-preset="readable">Легко читати</button>
     </div>
 
     <form id="form" autocomplete="off">
-      <label class="range">
-        <span>Довжина <output id="o-length">16</output></span>
-        <input type="range" id="length" min="12" max="24" step="1" value="16">
-      </label>
-
-      <label class="range">
-        <span>Випадкові символи <output id="o-share">35%</output></span>
-        <input type="range" id="share" min="20" max="60" step="5" value="35">
-      </label>
+      <div class="two">
+        <label class="range">
+          <span>Довжина <output id="o-length">16</output></span>
+          <input type="range" id="length" min="12" max="24" step="1" value="16">
+        </label>
+        <label class="range">
+          <span>Випадкові символи <output id="o-share">35%</output></span>
+          <input type="range" id="share" min="20" max="60" step="5" value="35">
+        </label>
+      </div>
       <p class="hint" id="share-hint"></p>
 
       <fieldset>
         <legend>Випадкова частина містить</legend>
-        <label class="check"><input type="checkbox" id="digits" checked> Цифри</label>
-        <label class="check"><input type="checkbox" id="symbols" checked> Символи</label>
-        <label class="check"><input type="checkbox" id="letters"> Випадкові літери</label>
+        <div class="inline">
+          <label class="check"><input type="checkbox" id="digits" checked> Цифри</label>
+          <label class="check"><input type="checkbox" id="symbols" checked> Символи</label>
+          <label class="check"><input type="checkbox" id="letters"> Літери</label>
+        </div>
         <label class="text">Набір символів
-          <input type="text" id="symbolSet" value="!@#$%&amp;*?+=-_." maxlength="40" spellcheck="false">
+          <input type="text" id="symbolSet" value="!@#$%^&amp;*()_+" maxlength="40" spellcheck="false" autocapitalize="off" autocorrect="off">
         </label>
+        <div class="inline">
+          <button type="button" class="chip" id="sym-shift" title="Символи верхнього ряду клавіатури, що набираються з Shift">Shift-ряд: !@#$%^&amp;*()_+</button>
+          <button type="button" class="chip" id="sym-all">Розширений набір</button>
+        </div>
+        <p class="hint">За замовчуванням це символи верхнього ряду клавіатури з Shift. Їх легко набрати на будь-якій розкладці.</p>
       </fieldset>
 
       <div class="grid">
@@ -107,28 +168,46 @@
 
       <fieldset>
         <legend>Заміна літер (leetspeak)</legend>
-        <label class="check"><input type="checkbox" id="leet"> Замінювати літери, напр. i&rarr;1, e&rarr;3, a&rarr;4</label>
-        <label class="select inline">Замінювати до
-          <select id="leetCount">
-            <option>1</option><option selected>2</option><option>3</option><option>4</option>
-          </select>
-          літер
-        </label>
+        <div class="inline">
+          <label class="check"><input type="checkbox" id="leet"> Замінювати літери (i&rarr;1, e&rarr;3, a&rarr;4)</label>
+          <label class="select inline-select">до
+            <select id="leetCount" aria-label="Скільки літер замінювати">
+              <option>1</option><option selected>2</option><option>3</option><option>4</option>
+            </select>
+            літер
+          </label>
+        </div>
       </fieldset>
+
+      <label class="select">Оцінка часу підбору для сценарію
+        <select id="scenario"></select>
+      </label>
+      <p class="hint" id="scenario-hint"></p>
     </form>
   </section>
 
-  <section class="notes" aria-labelledby="n-h">
-    <h2 id="n-h">Наскільки це надійно?</h2>
-    <p>Кількість біт розрахована так, ніби зловмисник точно знає, як працює цей генератор, тому враховуються лише випадкові вибори. Фіксоване правило на кшталт «завжди заміняти i на 1» нічого не додає. Час підбору рахується для 10<sup>10</sup> спроб за секунду проти швидкого офлайн-хешу.</p>
-    <ul>
-      <li><b>менше 50 біт</b> слабкий: не використовуйте для важливого</li>
-      <li><b>60&ndash;80 біт</b> добрий для звичайних акаунтів</li>
-      <li><b>80+ біт</b> сильний: майстер-паролі, ключі шифрування</li>
-    </ul>
-    <p>Короткі паролі (12 символів) не можуть бути сильними, якщо в них є справжні слова: збільшіть довжину чи частку випадкових символів або скористайтеся менеджером паролів.</p>
-    <p class="credit">Слова: <a href="https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases">EFF large wordlist</a>, &copy; Electronic Frontier Foundation, <a href="https://creativecommons.org/licenses/by/3.0/us/">CC BY 3.0 US</a>; <a href="http://wordlist.aspell.net/">SCOWL</a>, &copy; Kevin Atkinson. Образливі слова відфільтровано за допомогою списку <a href="https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words">LDNOOBW</a> (CC BY 4.0) і додаткового чорного списку.</p>
+  <!-- ============================= NOTES ============================ -->
+  <section class="card notes">
+    <details>
+      <summary>Наскільки це надійно?</summary>
+      <p>Кількість біт розрахована так, ніби зловмисник точно знає, як працює цей генератор, тому враховуються лише випадкові вибори. Фіксоване правило на кшталт «завжди заміняти i на 1» нічого не додає.</p>
+      <p>Час підбору залежить від сценарію атаки: за замовчуванням це викрадена база зі швидким хешем (MD5, SHA) і одна відеокарта, ≈10<sup>10</sup> спроб за секунду. Сайти з bcrypt/Argon2 чи обмеженням спроб входу набагато повільніші для атакувальника. Показаний час середній: перебір половини простору.</p>
+      <ul>
+        <li><b>менше 50 біт</b> слабкий: не використовуйте для важливого</li>
+        <li><b>50&ndash;59 біт</b> середній: для неважливих акаунтів</li>
+        <li><b>60&ndash;79 біт</b> добрий для звичайних акаунтів</li>
+        <li><b>80+ біт</b> сильний: майстер-паролі, ключі шифрування</li>
+      </ul>
+      <p>Короткі паролі не можуть бути сильними, якщо в них є справжні слова: збільште довжину чи частку випадкових символів або скористайтеся менеджером паролів.</p>
+      <p>Режим та налаштування зберігаються лише у вашому браузері (localStorage). Самі паролі не зберігаються ніколи.</p>
+    </details>
   </section>
 </main>
+
+<footer class="foot">
+  <p>Слова: <a href="https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases" rel="noopener noreferrer">EFF large wordlist</a>, &copy; Electronic Frontier Foundation, <a href="https://creativecommons.org/licenses/by/3.0/us/" rel="noopener noreferrer">CC BY 3.0 US</a>; <a href="http://wordlist.aspell.net/" rel="noopener noreferrer">SCOWL</a>, &copy; Kevin Atkinson. Образливі слова відфільтровано за допомогою списку <a href="https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words" rel="noopener noreferrer">LDNOOBW</a> (CC BY 4.0) і додаткового чорного списку.</p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

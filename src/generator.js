@@ -6,13 +6,16 @@ import { log2Choose, countWithClasses, rating } from './entropy.js';
 
 export const LIMITS = { minLength: 12, maxLength: 24, minShare: 0.2, maxShare: 0.6 };
 
+/** Symbols typed with Shift on the number row of a standard keyboard. */
+export const SHIFT_ROW_SYMBOLS = '!@#$%^&*()_+';
+
 export const DEFAULTS = {
   length: 16,
   randomShare: 0.35, // fraction of the password made of random characters
   digits: true,
   symbols: true,
   letters: false, // random letters inside the random part
-  symbolSet: '!@#$%&*?+=-_.',
+  symbolSet: SHIFT_ROW_SYMBOLS, // the shifted number row of a keyboard: !@#$%^&*()_+
   capitalization: 'first', // none | first | title | random
   leet: false,
   leetCount: 1, // how many letters to substitute (random positions)
@@ -45,9 +48,16 @@ const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 // ---------------------------------------------------------------- randomness
 
 const buf = new Uint32Array(1);
-/** Default RNG: one uniformly random uint32 from the Web Crypto CSPRNG. */
+/**
+ * Default RNG: one uniformly random uint32 from the Web Crypto CSPRNG.
+ * There is deliberately NO fallback to Math.random: without Web Crypto we refuse to generate.
+ */
 export function cryptoRng() {
-  globalThis.crypto.getRandomValues(buf);
+  const c = globalThis.crypto;
+  if (!c || typeof c.getRandomValues !== 'function') {
+    throw new Error('Цей браузер не підтримує Web Crypto API, тому безпечно згенерувати пароль неможливо. Оновіть браузер.');
+  }
+  c.getRandomValues(buf);
   return buf[0];
 }
 
@@ -369,4 +379,18 @@ export function suggestSettings(options, tiers, rng = cryptoRng, samples = 200, 
     if (hits / samples >= minHit) return { length: c.length, randomShare: c.randomShare };
   }
   return null;
+}
+
+/** Monte-Carlo estimate of the entropy of a configuration: {mean, min, max} in bits. */
+export function estimateEntropy(options, samples = 300, rng = cryptoRng) {
+  let sum = 0;
+  let min = Infinity;
+  let max = 0;
+  for (let i = 0; i < samples; i++) {
+    const b = generate(options, rng).entropyBits;
+    sum += b;
+    min = Math.min(min, b);
+    max = Math.max(max, b);
+  }
+  return { mean: sum / samples, min, max };
 }
